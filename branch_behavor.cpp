@@ -33,11 +33,13 @@ VOID BranchCounter(ADDRINT instr)
 //Print PC address, times executed and the times taken of the branches
 VOID Fini(INT32 code, VOID *v)
 {
-    cout<<"Conditional Branches"<<endl;
+    ofstream output("branches.txt");
+    output<<"Conditional Branches"<<endl;
     for (const auto &[add, info] : br_info)
     {
-        cout<<"0x"<<hex<<add<<dec<< " Times: " << info.times_executed << " Taken: " << info.times_taken << endl;
+        output<<"0x"<<hex<<add<<dec<< " Times: " << info.times_executed << " Taken: " << info.times_taken << endl;
     }
+    output.close();
 }
 
 //Iterate thru the sections, routines of the sections and Instructions of the routines. Pin functions for conditional branches 
