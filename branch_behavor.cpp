@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
+#include <string>
 #include "pin.H"
 
 using std::cerr;
@@ -9,15 +10,18 @@ using std::dec;
 using std::endl;
 using std::hex;
 using std::ofstream;
-using std::unordered_map;
+using std::map;
+using std::string;
 
 struct br_behavor
 {
     UINT32 times_executed = 0;
     UINT32 times_taken = 0;
+    string opcode;
 };
-//Map to store <PC,(times_seen,times_taken)>
-unordered_map<ADDRINT, br_behavor> br_info;
+
+//Map to store < PC, (times_seen, times_taken, opcode) >
+map<ADDRINT, br_behavor> br_info;
 
 //Increase the times taken
 VOID TakenCounter(ADDRINT instr)
@@ -33,11 +37,10 @@ VOID BranchCounter(ADDRINT instr)
 //Print PC address, times executed and the times taken of the branches
 VOID Fini(INT32 code, VOID *v)
 {
-    ofstream output("branches.txt");
-    output<<"Conditional Branches"<<endl;
+    ofstream output("branches.out");
     for (const auto &[add, info] : br_info)
     {
-        output<<"0x"<<hex<<add<<dec<< " Times: " << info.times_executed << " Taken: " << info.times_taken << endl;
+        output<<"0x"<<hex<<add<<dec<< " Times: " << info.times_executed << " Taken: " << info.times_taken << " Opcode: "<<info.opcode<<endl;
     }
     output.close();
 }
@@ -63,6 +66,8 @@ VOID ImageLoad(IMG img, VOID *v)
                 //If the instructions is a conditional branch
                 if (INS_Category(ins) == XED_CATEGORY_COND_BR)
                 {
+
+                    br_info[INS_Address(ins)].opcode=OPCODE_StringShort(INS_Opcode(ins));
                     //Insert the BranchCount function before the instruction
                     INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)BranchCounter, IARG_INST_PTR, IARG_END);
                     //Insesrt this fucntion TakenCounter to the taken flow of the instuctions
