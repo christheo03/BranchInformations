@@ -3,34 +3,38 @@
 #include <map>
 #include <string>
 #include <iomanip>
+#include <vector>
 #include "pin.H"
 
 using std::cerr;
 using std::cout;
-using std::dec;
 using std::endl;
-using std::hex;
-using std::left;
 using std::map;
 using std::ofstream;
 using std::setw;
 using std::string;
+using std::vector;
+
 #define NUM_PREV 10
+
 UINT64 total_executions = 0;
 UINT64 total_taken = 0;
+UINT64 bbl_id = 0;
 
 struct instruction
 {
-    UINT32 opcode = 0;
-    USIZE size = 0;
+    UINT32 opcode;
+    USIZE size;
 };
 
 struct flag_instruction
 {
+    ADDRINT pc;
     OPCODE opcode = 0;
+    BOOL same_bbl = false;
     USIZE size = 0;
-    UINT RA_type;
-    UINT RB_type;
+    vector<REG> reg_read;
+    vector<REG> reg_write;
 };
 
 struct branch
@@ -38,7 +42,7 @@ struct branch
     UINT32 times_executed = 0;
     instruction prev_instr[NUM_PREV];
     instruction next_instr[NUM_PREV];
-    string flag_wr_instr;
+    flag_instruction flag_wr_instr;
     UINT32 times_taken = 0;
     string opcode;
     INT32 offset = 0;
@@ -47,6 +51,7 @@ struct branch
 
 // Map to store < PC, (times_seen, times_taken, opcode) >
 map<ADDRINT, branch> br_info;
+map<ADDRINT, UINT32> bbls;
 
 // Increase the times taken
 VOID TakenCounter(ADDRINT instr)
@@ -58,7 +63,7 @@ VOID TakenCounter(ADDRINT instr)
 // Increase the times executed
 VOID BranchCounter(ADDRINT instr)
 {
-    total_executions = total_executions + 1;
+    total_executions++;
     br_info[instr].times_executed++;
 }
 
@@ -66,6 +71,7 @@ VOID BranchCounter(ADDRINT instr)
 
 VOID Fini(INT32 code, VOID *v)
 {
+
     ofstream output("branches.out");
 
     output << "Conditional Executions: " << total_executions << endl;
@@ -80,17 +86,19 @@ VOID Fini(INT32 code, VOID *v)
             ++it;
     }
 
-    // ---- HEADER ----
-    output << left
+    output << std::left
            << setw(20) << "Address"
            << setw(10) << "Opcode"
            << setw(10) << "Executed"
            << setw(10) << "Taken"
            << setw(20) << "Offset"
            << setw(7) << "Size"
-           << setw(39) << "Flag_Write_Instruction";
+           << setw(18) << "Flag_Write_PC"
+           << setw(18) << "Flag_Instr_Opcode"
+           << setw(18) << "same_BBL"
+           << setw(15) << "Regs_read"
+           << setw(15) << "Regs_write";
 
-    // Generate "Prev1 Prev2 ... PrevN"
     for (int i = 0; i < NUM_PREV; i++)
     {
         output << setw(10) << ("Prev Op(" + std::to_string(i + 1) + ")");
@@ -104,17 +112,29 @@ VOID Fini(INT32 code, VOID *v)
 
     output << endl;
 
-    // ---- ROWS ----
-    for (const auto &[addr, info] : br_info)
+    for (auto &[addr, info] : br_info)
     {
-        output << left
+        info.flag_wr_instr.same_bbl = (bbls[addr] == bbls[info.flag_wr_instr.pc]);
+
+        output << std::left
                << "0x" << setw(20) << std::hex << addr << std::dec
                << setw(10) << info.opcode
                << setw(10) << info.times_executed
                << setw(10) << info.times_taken
                << setw(20) << info.offset
                << setw(7) << info.size
-               << setw(39) << info.flag_wr_instr;
+               << "0x" << setw(18) << std::hex << info.flag_wr_instr.pc << std::dec
+               << setw(18) << info.flag_wr_instr.opcode
+               << setw(18) << info.flag_wr_instr.same_bbl;
+        std::ostringstream rr, rw;
+        for (auto r : info.flag_wr_instr.reg_read)
+            rr << REG_StringShort(r) << " ";
+
+        for (auto r : info.flag_wr_instr.reg_write)
+            rw << REG_StringShort(r) << " ";
+
+        output << setw(15) << rr.str()
+               << setw(15) << rw.str();
 
         // Print the prev instructions using a loop
         for (int i = 0; i < NUM_PREV; i++)
@@ -136,9 +156,6 @@ VOID Fini(INT32 code, VOID *v)
 // Iterate thru the sections, routines of the sections and Instructions of the routines. Pin functions for conditional branches
 VOID ImageLoad(IMG img, VOID *v)
 {
-
-    // Work only with the executable seen in the command line (-- executable.exe)
-
     for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
     {
         for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
@@ -180,11 +197,25 @@ VOID ImageLoad(IMG img, VOID *v)
 
                     if (INS_Valid(flag_write))
                     {
-                        br_info[addr].flag_wr_instr = INS_Disassemble(flag_write);
+                        br_info[addr].flag_wr_instr.opcode = INS_Opcode(flag_write);
+                        br_info[addr].flag_wr_instr.pc = INS_Address(flag_write);
+                        br_info[addr].flag_wr_instr.size = INS_Size(flag_write);
+
+                        for (UINT32 i = 0; i < INS_MaxNumRRegs(flag_write); i++)
+                        {
+                            REG r = INS_RegR(flag_write, i);
+                            br_info[addr].flag_wr_instr.reg_read.push_back(r);
+                        }
+
+                        for (UINT32 i = 0; i < INS_MaxNumWRegs(flag_write); i++)
+                        {
+                            REG r = INS_RegW(flag_write, i);
+                            br_info[addr].flag_wr_instr.reg_write.push_back(r);
+                        }
                     }
                     else
                     {
-                        br_info[addr].flag_wr_instr = "--";
+                        br_info[addr].flag_wr_instr.pc = -1;
                     }
                     // Insert the BranchCount function before the instruction
                     INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)BranchCounter, IARG_INST_PTR, IARG_END);
@@ -197,10 +228,26 @@ VOID ImageLoad(IMG img, VOID *v)
     }
 }
 
+void Trace(TRACE trace, VOID *v)
+{
+
+    for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl))
+    {
+
+        for (INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins))
+        {
+
+            bbls[INS_Address(ins)] = bbl_id;
+        }
+        bbl_id++;
+    }
+}
+
 int main(int argc, char *argv[])
 {
     PIN_Init(argc, argv);
     PIN_AddFiniFunction(Fini, 0);
+    TRACE_AddInstrumentFunction(Trace, 0);
     IMG_AddInstrumentFunction(ImageLoad, 0);
     PIN_StartProgram();
 }
