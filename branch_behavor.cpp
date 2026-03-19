@@ -60,7 +60,6 @@ struct branch
     string routine_type;
 };
 
-
 map<ADDRINT, branch> br_info; // Map for branch's heuristics
 map<ADDRINT, UINT32> bbls; // Map that shows in what basic block an instruction is located
 // Increase the times taken
@@ -82,92 +81,78 @@ VOID BranchCounter(ADDRINT instr)
 VOID Fini(INT32 code, VOID *v)
 {
 
-    ofstream output("branches.out");
+    ofstream output("branches.csv");
 
-    output << "Conditional Executions: " << total_executions << endl;
-    output << "Total Taken: " << total_taken << endl;
+    output << "#Conditional Executions: " << total_executions << "\n";
+    output << "#Total Taken: " << total_taken << "\n";
 
-    // Remove non-executed branches
-    for (auto it = br_info.begin(); it != br_info.end();)
-    {
-        if (it->second.times_executed == 0)
-            it = br_info.erase(it);
-        else
-            ++it;
+
+    output << "Address,Opcode,Executed,Taken,Offset,Size,Flag_Write_PC,"
+           << "Flag_Instr_Opcode,Same_BBL,Routine_Type,Regs_Read,Regs_Write";
+    
+    for (int i = 0; i < NUM_PREV; i++) {
+        output << ",Prev_Op_" << (i + 1) << ",Prev_Size_" << (i + 1);
     }
-
-    output << std::left
-           << setw(20) << "Address"
-           << setw(10) << "Opcode"
-           << setw(10) << "Executed"
-           << setw(10) << "Taken"
-           << setw(20) << "Offset"
-           << setw(7) << "Size"
-           << setw(18) << "Flag_Write_PC"
-           << setw(18) << "Flag_Instr_Opcode"
-           << setw(18) << "same_BBL"
-           << setw(15) << "Routine_Type"
-           << setw(40) << "Regs_read"
-           << setw(15) << "Regs_write";
-    for (int i = 0; i < NUM_PREV; i++)
-    {
-        output << setw(10) << ("Prev Op(" + std::to_string(i + 1) + ")");
-        output << setw(10) << ("Size");
+    for (int i = 0; i < NUM_PREV; i++) {
+        output << ",Next_Op_" << (i + 1) << ",Next_Size_" << (i + 1);
     }
-    for (int i = 0; i < NUM_PREV; i++)
-    {
-        output << setw(10) << ("Next Op(" + std::to_string(i + 1) + ")");
-        output << setw(10) << ("Size");
-    }
+    output << "\n";
 
-    output << endl;
 
-    for (auto &[addr, info] : br_info)
+for (auto it = br_info.begin(); it != br_info.end(); ++it)
     {
+        auto addr = it->first;
+        auto &info = it->second;
+        // Skip non-executed branches
+        if (info.times_executed == 0) continue;
+
+        // Calculate BBL logic
         info.flag_wr_instr.same_bbl = (bbls[addr] == bbls[info.flag_wr_instr.pc]);
 
-        output << std::left
-               << "0x" << setw(20) << std::hex << addr << std::dec
-               << setw(10) << info.opcode
-               << setw(10) << info.times_executed
-               << setw(10) << info.times_taken
-               << setw(20) << info.offset
-               << setw(7) << info.size
-               << "0x" << setw(18) << std::hex << info.flag_wr_instr.pc << std::dec
-               << setw(18) << info.flag_wr_instr.opcode
-               << setw(18) << info.flag_wr_instr.same_bbl
-               << setw(15) << info.routine_type;
-        std::ostringstream rr, rw;
-        for (auto r : info.flag_wr_instr.reg_read){
-            rr << REG_StringShort(r.reg) << "(";
-            if(bbls[r.define_instr_pc]!=bbls[addr]){
-                rr << "-1";
+        // Basic Info
+        output << "0x" << std::hex << addr << std::dec << ","
+               << info.opcode << ","
+               << info.times_executed << ","
+               << info.times_taken << ","
+               << info.offset << ","
+               << info.size << ","
+               << "0x" << std::hex << info.flag_wr_instr.pc << std::dec << ","
+               << info.flag_wr_instr.opcode << ","
+               << info.flag_wr_instr.same_bbl << ","
+               << info.routine_type << ",";
+
+        // Regs Read (Joined by semicolons to keep them in one CSV cell)
+        output << "\"";
+        for (auto r : info.flag_wr_instr.reg_read) {
+            output << REG_StringShort(r.reg) << "(";
+            if (bbls[r.define_instr_pc] != bbls[addr]) {
+                output << "-1";
+            } else {
+                output << OPCODE_StringShort(r.define_instr_op);
             }
-            else{
-                rr << OPCODE_StringShort(r.define_instr_op);
-            }
-            rr << ") ";
+            output << ") ";
+        }
+        output << "\",";
+
+        // Regs Write
+        output << "\"";
+        for (auto r : info.flag_wr_instr.reg_write) {
+            output << REG_StringShort(r.reg) << " ";
+        }
+        output << "\",";
+
+        // Prev Instructions
+        for (int i = 0; i < NUM_PREV; i++) {
+            output << info.prev_instr[i].opcode << "," << info.prev_instr[i].size << ",";
         }
 
-        for (auto r : info.flag_wr_instr.reg_write)
-            rw << REG_StringShort(r.reg) << " ";
-
-        output << setw(40) << rr.str()
-               << setw(15) << rw.str();
-        
-        // Print the prev instructions using a loop
-        for (int i = 0; i < NUM_PREV; i++)
-        {
-            output << setw(10) << info.prev_instr[i].opcode << setw(10) << info.prev_instr[i].size;
+        // Next Instructions
+        for (int i = 0; i < NUM_PREV; i++) {
+            output << info.next_instr[i].opcode << "," << info.next_instr[i].size;
+            if (i < NUM_PREV - 1) output << ","; // No comma after the very last element
         }
 
-        for (int i = 0; i < NUM_PREV; i++)
-        {
-            output << setw(10) << info.next_instr[i].opcode << setw(10) << info.next_instr[i].size;
-        }
-
-        output << endl;
-        
+        output << "\n";
     }
 
     output.close();
@@ -243,14 +228,14 @@ VOID ImageLoad(IMG img, VOID *v)
                         {
                             REG r = INS_RegR(flag_write, i);  // Register that the Flag_Written Instruction reads
                             regs new_reg;
-                            new_reg.reg= REG_FullRegName(r);
+                            new_reg.reg= r;
                             INS prev= INS_Prev(flag_write);
                             while(INS_Valid(prev)){
                                 for (UINT32 w=0; w<INS_MaxNumWRegs(prev);w++){
                                     REG wreg=INS_RegW(prev,w);
                                     if(wreg == REG_INVALID()) continue;
 
-                                    if(REG_FullRegName(wreg) == new_reg.reg)
+                                    if(REG_FullRegName(wreg) == REG_FullRegName(new_reg.reg))
                                     {
                                         new_reg.define_instr_pc = INS_Address(prev);
                                         new_reg.define_instr_op=INS_Opcode(prev);
@@ -297,22 +282,18 @@ VOID ImageLoad(IMG img, VOID *v)
 
 
 // Function that maps the instruction with its basic block
-// When does the Trace calls
 void Trace(TRACE trace, VOID *v)
 {
-
     for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl))
-    {
-
+    {   
         for (INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins))
         {
+
             bbls[INS_Address(ins)] = bbl_id;
-            
         } 
         bbl_id++;
     }
 }
-
 int main(int argc, char *argv[])
 {
     PIN_InitSymbols();

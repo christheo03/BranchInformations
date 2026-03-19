@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <algorithm>
 
+
 using std::cerr;
 using std::cout;
 using std::endl;
@@ -21,6 +22,7 @@ using std::vector;
 using std::stringstream;
 using std::map;
 
+
 enum SuccKind{
     SUCC_TAKEN,
     SUCC_FALL
@@ -32,7 +34,13 @@ struct Succ{
     vector <string> tracked_regs;
 };
 
+struct BranchResult{
+    int taken=-1;
+    int fall=-1;
+};
+
 map<ADDRINT,vector<Succ>> succ_map;
+map<ADDRINT,BranchResult> branch_results;
 
 string Trim(const string& s) {
     size_t start = s.find_first_not_of(" \t\r\n");
@@ -155,23 +163,62 @@ VOID Trace(TRACE trace, VOID *v) {
         ADDRINT bbl_addr = BBL_Address(bbl);
 
         auto it = succ_map.find(bbl_addr);
-        if (it != succ_map.end()) {
-            cout << "Matched BBL: 0x" << std::hex << bbl_addr << std::dec << "\n";
+        if(it==succ_map.end())continue;
 
-            for (const auto& s : it->second) {
-                cout << "  branch_addr: 0x" << std::hex << s.branch_addr << std::dec << "\n";
-                cout << "  kind: " << (s.kind == SUCC_TAKEN ? "TAKEN" : "FALL") << "\n";
-                cout << "  tracked_regs: ";
+        for (const auto& s : it ->second){
+            bool ubd=false;
 
-                for (const auto& reg : s.tracked_regs) {
-                    cout << reg << " ";
+            for (const auto& tracked_reg : s.tracked_regs){
+                bool reads= false;
+                bool writes=false;
+                for(INS ins=BBL_InsHead(bbl); INS_Valid(ins); ins=INS_Next(ins)){
+
+                    UINT32 rcount = INS_MaxNumRRegs(ins);
+                    for(UINT32 i=0; i<rcount; i++){
+                        REG r= INS_RegR(ins,i);
+                        if(REG_StringShort(r)== tracked_reg){
+                            if(writes){
+                                break;
+                            }
+                            reads=true;
+                            break;
+                        }
+                    }
+                    UINT32 wcount = INS_MaxNumWRegs(ins);
+                    for (UINT32 i = 0; i < wcount; i++) {
+                        REG r = INS_RegW(ins, i);
+                        if (REG_StringShort(r) == tracked_reg) {
+                            writes=true;
+                            if(reads) ubd=true;
+                            }
+                        }
                 }
-                cout << "\n";
+                if (ubd) break;
             }
-
-            cout << "\n";
+            if (s.kind == SUCC_TAKEN)
+                branch_results[s.branch_addr].taken = (ubd ? 1 : 0);
+            else
+                branch_results[s.branch_addr].fall = (ubd ? 1 : 0);
         }
     }
+}
+
+VOID Fini(INT32 code, VOID *v) {
+    std::ofstream out("ubd_results.csv");
+
+    out << "Address,taken_ubd,fall_ubd\n";
+
+    for (const auto& entry : branch_results) {
+        ADDRINT branch_addr = entry.first;
+        const BranchResult& res = entry.second;
+
+        out << "0x" << std::hex << branch_addr << std::dec
+            << "," << res.taken
+            << "," << res.fall
+            << "\n";
+    }
+
+    out.close();
 }
 
 
@@ -186,8 +233,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     cout<<"Loaded CSV Succesfull\n";
-
+    
     TRACE_AddInstrumentFunction(Trace, 0);
+    PIN_AddFiniFunction(Fini, 0);
     PIN_StartProgram();
     return 0;
 
