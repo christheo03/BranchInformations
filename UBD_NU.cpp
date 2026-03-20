@@ -35,8 +35,10 @@ struct Succ{
 };
 
 struct BranchResult{
-    int taken=-1;
-    int fall=-1;
+    int taken_ubd=-1;
+    int taken_store=-1;
+    int fall_ubd=-1;
+    int fall_store=-1;
 };
 
 map<ADDRINT,vector<Succ>> succ_map;
@@ -153,7 +155,6 @@ bool Load_CSV(const string& path){
             succ_map[fall_addr].push_back(s);
         }
 
-
     }
     return true;
 }
@@ -161,6 +162,7 @@ bool Load_CSV(const string& path){
 VOID Trace(TRACE trace, VOID *v) {
     for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl)) {
         ADDRINT bbl_addr = BBL_Address(bbl);
+        bool has_store=false;
 
         auto it = succ_map.find(bbl_addr);
         if(it==succ_map.end())continue;
@@ -173,6 +175,10 @@ VOID Trace(TRACE trace, VOID *v) {
                 bool writes=false;
                 for(INS ins=BBL_InsHead(bbl); INS_Valid(ins); ins=INS_Next(ins)){
 
+                    if(INS_IsMemoryWrite(ins)){
+                        has_store=true;
+                    }
+
                     UINT32 rcount = INS_MaxNumRRegs(ins);
                     for(UINT32 i=0; i<rcount; i++){
                         REG r= INS_RegR(ins,i);
@@ -184,6 +190,7 @@ VOID Trace(TRACE trace, VOID *v) {
                             break;
                         }
                     }
+
                     UINT32 wcount = INS_MaxNumWRegs(ins);
                     for (UINT32 i = 0; i < wcount; i++) {
                         REG r = INS_RegW(ins, i);
@@ -195,10 +202,12 @@ VOID Trace(TRACE trace, VOID *v) {
                 }
                 if (ubd) break;
             }
-            if (s.kind == SUCC_TAKEN)
-                branch_results[s.branch_addr].taken = (ubd ? 1 : 0);
-            else
-                branch_results[s.branch_addr].fall = (ubd ? 1 : 0);
+            if (s.kind == SUCC_TAKEN){
+                branch_results[s.branch_addr].taken_ubd = (ubd ? 1 : 0);
+                branch_results[s.branch_addr].taken_store = (has_store ? 1 : 0);}
+            else{
+                branch_results[s.branch_addr].fall_ubd = (ubd ? 1 : 0);
+                branch_results[s.branch_addr].fall_store = (has_store ? 1 : 0);}
         }
     }
 }
@@ -206,15 +215,17 @@ VOID Trace(TRACE trace, VOID *v) {
 VOID Fini(INT32 code, VOID *v) {
     std::ofstream out("ubd_results.csv");
 
-    out << "Address,taken_ubd,fall_ubd\n";
+    out << "Address,taken_ubd,fall_ubd,taken_store,fall_store\n";
 
     for (const auto& entry : branch_results) {
         ADDRINT branch_addr = entry.first;
         const BranchResult& res = entry.second;
 
         out << "0x" << std::hex << branch_addr << std::dec
-            << "," << res.taken
-            << "," << res.fall
+            << "," << res.taken_ubd
+            << "," << res.fall_ubd
+            << "," << res.taken_store
+            << "," << res.fall_store
             << "\n";
     }
 
