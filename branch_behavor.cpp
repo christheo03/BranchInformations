@@ -161,6 +161,7 @@ for (auto it = br_info.begin(); it != br_info.end(); ++it)
 // Iterate thru the sections, routines of the sections and Instructions of the routines. Pin functions for conditional branches
 VOID ImageLoad(IMG img, VOID *v)
 {
+    if (!IMG_IsMainExecutable(img)) return;
 
     for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
     {
