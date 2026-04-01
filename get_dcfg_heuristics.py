@@ -1,19 +1,37 @@
+# Christos Theodorou
+# Github: christheo03
+
 import json
 import csv
 import networkx as nx
+from bisect import bisect_right
+from networkx.drawing.nx_pydot import write_dot
 
-# --- Configuration ---
+# Input (Graph, node_id, radius, outputfile_name)
+# Output produce a .dot file which is a subgraph of the garaph around the node_id 
+# def export_dot_subgraph(G, node, radius=1, filename="subgraph.dot"):
+#     subG = nx.ego_graph(G, node, radius=radius, undirected=True)
+
+#     # optional: put edge labels in the DOT output
+#     for u, v, data in subG.edges(data=True):
+#         data["label"] = str(data.get("type_id", ""))
+
+#     write_dot(subG, filename)
+#     print(f"Wrote DOT subgraph to {filename}")
+
+
 BASE = "0x400000"
 START = 1
 END = 2
 CSV_FILENAME ="branches.csv"
 DCFG_FILENAME="test.dcfg.json"
-# --- Helper Functions ---
 
+# Convert a hexandecimal to decimal
 def to_int(pc):
     if isinstance(pc, int): return pc
     return int(pc, 16) if str(pc).startswith('0x') else int(pc)
 
+# Creation of the Graph using the edges
 def create_DiGraph(edges_table: list):
     G = nx.DiGraph()
     for row in edges_table[1:]:
@@ -23,15 +41,24 @@ def create_DiGraph(edges_table: list):
         G.add_edge(src, dst, type_id=edge_type_id)
     return G
 
+# Check if node u dominates node v
 def dominates(u, v, dom_sets):
     return u in dom_sets.get(v, set())
 
-def is_LoopHead(G, v, dom_sets):
-    for u in G.predecessors(v):
-        if dominates(v, u, dom_sets):
-            return True
+# Check if v is a loop head
+def is_LoopHead(v,loops):
+    if v in loops:
+        return True
     return False
 
+
+    # for u in G.predecessors(v):
+    #     if dominates(v, u, dom_sets):
+    #         return True
+    # return False
+
+
+# Creation of a dictionary with key a node and value its dominators
 def create_domsets(idom, Root):
     dom_sets = {}
     for node in idom:
@@ -44,15 +71,36 @@ def create_domsets(idom, Root):
             cur = idom[cur]
     return dom_sets
 
-def pc_bbid(pc_br, bb_table):
-    offset = pc_br - to_int(BASE)
+# Creation of index tables that helps the performance of the serch 
+def index_bb(bb_table):
+    starts = []
+    blocks = []
     for bb in bb_table[1:]:
-        node_id = bb[0]
-        bb_offset = to_int(bb[1])
-        bb_size = bb[2]
-        if bb_offset <= offset < bb_offset + bb_size:
-            return node_id,bb_offset,bb_size
+        node_id=bb[0]
+        offset = to_int(bb[1])
+        size = bb[2]
+        end = offset + size
+        starts.append(offset)
+        blocks.append((node_id,offset,size,end))
+    
+    return starts,blocks
+
+# Return the basic block information with input a pc address
+def pc_bbid(pc_br, starts, blocks):
+    offset = pc_br - to_int(BASE)
+
+    i = bisect_right(starts,offset) - 1
+
+    if i<0:
+        return None, None, None
+    
+    node_id, bb_offset, bb_size, bb_end = blocks[i]
+
+    if offset < bb_end:
+        return node_id, bb_offset, bb_size
+    
     return None,None,None
+
 
 def edge_type(bb, G):
     edges = list(G.out_edges(bb, data=True))
@@ -66,6 +114,9 @@ def edge_type(bb, G):
             return t
     return types_ids[0]
 
+
+# Input: Routines from json file
+# Output: Dictionary of loops with key the loop head node and value the nodes that a part of the body of the loop
 def find_loops(routines):
     loops = {}
     for routine in routines[1:]:
@@ -77,12 +128,14 @@ def find_loops(routines):
                 loops[loop_head] = loop_nodes
     return loops
 
+# Check if an edge from src to dst is a loop exit edge
 def is_loop_exit_edge(src_node, dst_node, loops):
     for loop_head, loop_nodes in loops.items():
         if src_node in loop_nodes and dst_node not in loop_nodes:
             return True
     return False
 
+# Check if the edge type of a basic block is a CALL
 def has_succ_call(bb, G):
     CALL_TYPES = {3, 4, 5, 7, 19}
     UNCONDITIONAL_BRANCH_TYPES = {10, 15, 16}
@@ -100,17 +153,22 @@ def has_succ_call(bb, G):
         pass
     return False
 
-# --- Main Logic ---
 
+# Returns the location of the Main IMAGE that is Address is BASE
 def find_img_num(dcfg):
     images =dcfg['PROCESSES'][1][1]['IMAGES']
     for i in range(len(images)):
         if images[i][1]==BASE:
-            print(i)
             return i
+
+# Visualise a subgraph arround node
+def export_dot_subgraph(G, node, radius=1, filename="subgraph.dot"):
+    subG = nx.ego_graph(G, node, radius=radius, undirected=True)
+    write_dot(subG, filename)
+
         
 def main():
-    # 1. Load DCFG data
+    # Load information from the json file
     try:
         with open("test.dcfg.json", "r") as f:
             dcfg_json = json.load(f)
@@ -122,7 +180,7 @@ def main():
         print(f"Error loading JSON: {e}")
         return
 
-    # Setup Graph analysis
+    # Graph analysis information
     loops = find_loops(routines)
     dcfg_graph = create_DiGraph(edges_table)
     rev_graph = dcfg_graph.reverse(copy=False)
@@ -130,9 +188,10 @@ def main():
     ipdom = nx.immediate_dominators(rev_graph, END)
     dom_sets = create_domsets(idom, START)
     ipdom_sets = create_domsets(ipdom, END)
+    starts, basic_blocks= index_bb(bb_table)
 
     updated_rows = []
-    # Full list of heuristic columns including Successor Ends
+    # List of inforamtion of each branch
     new_columns = [
         "br_is_loop_header", 
         "t_dominates", "t_post_dominates", "t_is_loop_head", "t_is_backedge", "t_successor_ends", "t_is_loop_exit", "t_has_call", 
@@ -142,7 +201,6 @@ def main():
 
     # 2. Read existing CSV data
     with open(CSV_FILENAME, "r") as f:
-        # Filter out comments
         data_lines = [line for line in f if not line.startswith('#')]
         reader = csv.DictReader(data_lines)
         original_fieldnames = reader.fieldnames
@@ -150,7 +208,8 @@ def main():
         for row in reader:
             pc_str = row['Address']
             pc_br = to_int(pc_str)
-            br_bbid,bb_br_starts,size_br = pc_bbid(pc_br, bb_table)
+            br_bbid,bb_br_starts,size_br = pc_bbid(pc_br, starts,basic_blocks)
+
 
             analysis = {col: -1 for col in new_columns}
 
@@ -160,11 +219,11 @@ def main():
                 taken_pc = pc_br + jump_offset
                 fall_pc = pc_br + instr_size
                 
-                taken_bbid,bb_t_starts,size_t = pc_bbid(taken_pc, bb_table)
-                fall_bbid,bb_f_starts,size_f = pc_bbid(fall_pc, bb_table)
+                taken_bbid,bb_t_starts,size_t = pc_bbid(taken_pc, starts,basic_blocks)
+                fall_bbid,bb_f_starts,size_f = pc_bbid(fall_pc, starts,basic_blocks)
 
                 analysis["branch_bb_addr"] = bb_br_starts+ int(BASE,16)
-                analysis["br_is_loop_header"] = int(is_LoopHead(dcfg_graph, br_bbid, dom_sets))
+                analysis["br_is_loop_header"] = int(is_LoopHead(br_bbid, loops))
                 analysis["branch_bb_ends"]= bb_br_starts+size_br+int(BASE,16)
 
                 if taken_bbid is not None:
@@ -172,7 +231,7 @@ def main():
                     analysis["taken_bb_ends"]= bb_t_starts+size_t+int(BASE,16)
                     analysis["t_dominates"] = int(dominates(br_bbid, taken_bbid, dom_sets))
                     analysis["t_post_dominates"] = int(dominates(taken_bbid, br_bbid, ipdom_sets))
-                    analysis["t_is_loop_head"] = int(is_LoopHead(dcfg_graph, taken_bbid, dom_sets))
+                    analysis["t_is_loop_head"] = int(is_LoopHead(taken_bbid, loops))
                     analysis["t_is_backedge"] = int(dominates(taken_bbid, br_bbid, dom_sets))
                     analysis["t_successor_ends"] = edge_type(taken_bbid, dcfg_graph)
                     analysis["t_is_loop_exit"] = int(is_loop_exit_edge(br_bbid, taken_bbid, loops))
@@ -183,7 +242,7 @@ def main():
                     analysis["fall_bb_ends"]= bb_f_starts+size_f+int(BASE,16)
                     analysis["f_dominates"] = int(dominates(br_bbid, fall_bbid, dom_sets))
                     analysis["f_post_dominates"] = int(dominates(fall_bbid, br_bbid, ipdom_sets))
-                    analysis["f_is_loop_head"] = int(is_LoopHead(dcfg_graph, fall_bbid, dom_sets))
+                    analysis["f_is_loop_head"] = int(is_LoopHead( fall_bbid, loops))
                     analysis["f_is_backedge"] = int(dominates(fall_bbid, br_bbid, dom_sets))
                     analysis["f_successor_ends"] = edge_type(fall_bbid, dcfg_graph)
                     analysis["f_is_loop_exit"] = int(is_loop_exit_edge(br_bbid, fall_bbid, loops))
@@ -199,6 +258,6 @@ def main():
         writer.writerows(updated_rows)
 
     print(f"Done! {CSV_FILENAME} updated with all heuristics and successor types.")
-
+    # export_dot_subgraph(dcfg_graph, node=29, radius=3)
 if __name__ == "__main__":
     main()
