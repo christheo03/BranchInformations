@@ -5,11 +5,12 @@
 #include <iomanip>
 #include <vector>
 #include "pin.H"
+#include <unordered_map>
 
 using std::cerr;
 using std::cout;
 using std::endl;
-using std::map;
+using std::unordered_map;
 using std::ofstream;
 using std::setw;
 using std::string;
@@ -60,21 +61,33 @@ struct branch
     string routine_type;
 };
 
-map<ADDRINT, branch> br_info; // Map for branch's heuristics
-map<ADDRINT, UINT32> bbls; // Map that shows in what basic block an instruction is located
-// Increase the times taken
-VOID TakenCounter(ADDRINT instr)
-{
-    br_info[instr].times_taken++;
+unordered_map<ADDRINT, branch> br_info; // Map for branch's heuristics
+unordered_map<ADDRINT, UINT32> bbls; // Map that shows in what basic block an instruction is located
+unordered_map<REG, ADDRINT> last_writer_pc; // key register value address of instruction
+unordered_map<REG, OPCODE> last_writer_op; // key register value opcode of instruction
+
+VOID PIN_FAST_ANALYSIS_CALL TakenCounter(branch *b){
+    b->times_taken++;
     total_taken++;
 }
 
-// Increase the times executed
-VOID BranchCounter(ADDRINT instr)
-{
+VOID PIN_FAST_ANALYSIS_CALL BranchCounter(branch *b){
     total_executions++;
-    br_info[instr].times_executed++;
+    b->times_executed++;
 }
+// Increase the times taken
+// VOID TakenCounter(ADDRINT instr)
+// {
+//     br_info[instr].times_taken++;
+//     total_taken++;
+// }
+
+// Increase the times executed
+// VOID BranchCounter(ADDRINT instr)
+// {
+//     total_executions++;
+//     br_info[instr].times_executed++;
+// }
 
 // Print PC address, times executed and the times taken of the branches
 
@@ -99,7 +112,7 @@ VOID Fini(INT32 code, VOID *v)
     output << "\n";
 
 
-for (auto it = br_info.begin(); it != br_info.end(); ++it)
+    for (auto it = br_info.begin(); it != br_info.end(); ++it)
     {
         auto addr = it->first;
         auto &info = it->second;
@@ -162,7 +175,6 @@ for (auto it = br_info.begin(); it != br_info.end(); ++it)
 VOID ImageLoad(IMG img, VOID *v)
 {
     if (!IMG_IsMainExecutable(img)) return;
-
     for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec))
     {
         for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn))
@@ -188,67 +200,67 @@ VOID ImageLoad(IMG img, VOID *v)
                 {
                     flag_write = ins;
                 }
+                
+                for (UINT32 w = 0; w < INS_MaxNumWRegs(ins); w++) {
+                    REG r = REG_FullRegName(INS_RegW(ins, w));
+                    if (r != REG_INVALID()) {
+                        last_writer_pc[r] = INS_Address(ins);
+                        last_writer_op[r] = INS_Opcode(ins);
+                    }
+                }
+
+
                 // If the instructions is a conditional branch
                 if (INS_Category(ins) == XED_CATEGORY_COND_BR)
                 {
                     ADDRINT addr = INS_Address(ins);
                     br_in_rtn.push_back(addr); // Record this branch to label later
-
-                    br_info[addr].opcode = OPCODE_StringShort(INS_Opcode(ins)); // Opcode of branch
+                    branch &b =br_info[addr];
+                    b.opcode = OPCODE_StringShort(INS_Opcode(ins)); // Opcode of branch
                     if (INS_IsDirectControlFlow(ins))
                     {
-                        br_info[addr].offset = INS_DirectControlFlowTargetAddress(ins) - addr; // Branch's Offset 
+                        b.offset = INS_DirectControlFlowTargetAddress(ins) - addr; // Branch's Offset 
                     }
-                    br_info[addr].size = INS_Size(ins); // Branch's instruction size 
+                    b.size = INS_Size(ins); // Branch's instruction size 
                     int i = 0;
 
                     // Previous N Instructions from branch
                     for (INS prev = INS_Prev(ins); INS_Valid(prev) && i < NUM_PREV; prev = INS_Prev(prev))
                     {
-                        br_info[addr].prev_instr[i].opcode = INS_Opcode(prev); 
-                        br_info[addr].prev_instr[i].size = INS_Size(prev);
+                        b.prev_instr[i].opcode = INS_Opcode(prev); 
+                        b.prev_instr[i].size = INS_Size(prev);
                         i = i + 1;
                     }
                     i = 0;
                     // Next N Instructions from branch
                     for (INS next = INS_Next(ins); INS_Valid(next) && i < NUM_PREV; next = INS_Next(next))
                     {
-                        br_info[addr].next_instr[i].opcode = INS_Opcode(next);
-                        br_info[addr].next_instr[i].size = INS_Size(next);
+                        b.next_instr[i].opcode = INS_Opcode(next);
+                        b.next_instr[i].size = INS_Size(next);
                         i = i + 1;
                     }
 
 
                     if (INS_Valid(flag_write))
                     {
-                        br_info[addr].flag_wr_instr.opcode = INS_Opcode(flag_write); // Opcode of the Flag_Write Instr
-                        br_info[addr].flag_wr_instr.pc = INS_Address(flag_write); // PC of Flag_Write Instr
-                        br_info[addr].flag_wr_instr.size = INS_Size(flag_write); // Size of Flag_Write Instr
+                        b.flag_wr_instr.opcode = INS_Opcode(flag_write); // Opcode of the Flag_Write Instr
+                        b.flag_wr_instr.pc = INS_Address(flag_write); // PC of Flag_Write Instr
+                        b.flag_wr_instr.size = INS_Size(flag_write); // Size of Flag_Write Instr
 
                         for (UINT32 i = 0; i < INS_MaxNumRRegs(flag_write); i++)
                         {
-                            REG r = INS_RegR(flag_write, i);  // Register that the Flag_Written Instruction reads
+                            REG r = INS_RegR(flag_write, i);
+                            if (r == REG_INVALID()) continue;
+
                             regs new_reg;
-                            new_reg.reg= r;
-                            INS prev= INS_Prev(flag_write);
-                            while(INS_Valid(prev)){
-                                for (UINT32 w=0; w<INS_MaxNumWRegs(prev);w++){
-                                    REG wreg=INS_RegW(prev,w);
-                                    if(wreg == REG_INVALID()) continue;
-
-                                    if(REG_FullRegName(wreg) == REG_FullRegName(new_reg.reg))
-                                    {
-                                        new_reg.define_instr_pc = INS_Address(prev);
-                                        new_reg.define_instr_op=INS_Opcode(prev);
-                                        break;
-                                    }
-                                }
-                                if (new_reg.define_instr_pc != 0)
-                                break;
-
-                                prev=INS_Prev(prev);
-                            }                       
-                            br_info[addr].flag_wr_instr.reg_read.push_back(new_reg);
+                            new_reg.reg = r;
+                            
+                            // Check our "Single Pass" tracker instead of searching backwards
+                            if (last_writer_pc.find(REG_FullRegName(r)) != last_writer_pc.end()) {
+                                new_reg.define_instr_pc = last_writer_pc[REG_FullRegName(r)];
+                                new_reg.define_instr_op = last_writer_op[REG_FullRegName(r)];
+                            }
+                            b.flag_wr_instr.reg_read.push_back(new_reg);
                         }
 
                         for (UINT32 i = 0; i < INS_MaxNumWRegs(flag_write); i++)
@@ -256,17 +268,17 @@ VOID ImageLoad(IMG img, VOID *v)
                             REG r = INS_RegW(flag_write, i); // Register that Flag_write Instuction writes
                             regs new_reg;
                             new_reg.reg=r;
-                            br_info[addr].flag_wr_instr.reg_write.push_back(new_reg);
+                            b.flag_wr_instr.reg_write.push_back(new_reg);
                         }
                     }
                     else
                     {
-                        br_info[addr].flag_wr_instr.pc = -1;
+                        b.flag_wr_instr.pc = -1;
                     }
                     // Insert the BranchCount function before the instruction
-                    INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)BranchCounter, IARG_INST_PTR, IARG_END);
+                    INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)BranchCounter, IARG_FAST_ANALYSIS_CALL, IARG_PTR, &b ,IARG_END);
                     // Insesrt this fucntion TakenCounter to the taken flow of the instuctions
-                    INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)TakenCounter, IARG_INST_PTR, IARG_END);
+                    INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)TakenCounter, IARG_FAST_ANALYSIS_CALL,IARG_PTR,&b, IARG_END);
                 }
             }
         
@@ -299,6 +311,8 @@ int main(int argc, char *argv[])
 {
     PIN_InitSymbols();
     PIN_Init(argc, argv);
+    br_info.reserve(250000);
+    bbls.reserve(1000000);
     PIN_AddFiniFunction(Fini, 0);
     TRACE_AddInstrumentFunction(Trace, 0);
     IMG_AddInstrumentFunction(ImageLoad, 0);
