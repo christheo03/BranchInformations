@@ -22,6 +22,13 @@ using std::vector;
 using std::stringstream;
 using std::map;
 
+KNOB<string> KnobCsvPath(
+    KNOB_MODE_WRITEONCE,
+    "pintool",
+    "csv",
+    "",
+    "path to branches csv file"
+);
 
 enum SuccKind{
     SUCC_TAKEN,
@@ -238,7 +245,12 @@ int main(int argc, char* argv[]) {
         cerr << "PIN_Init failed\n";
         return 1;
     }
-    string path= "branches.csv";
+    string path = KnobCsvPath.Value();
+
+    if (path.empty()) {
+        cerr << "ERROR: please provide -csv <file>\n";
+        return 1;
+    }
 
     if(!Load_CSV(path)){
         return 1;
