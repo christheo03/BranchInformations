@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 
 
+# Class Dataset : Build tensors.
 class BranchDataset(Dataset):
     def __init__(self,X,y):
         self.X = torch.tensor(X,dtype=torch.float32)
@@ -21,7 +22,25 @@ class BranchDataset(Dataset):
     def __getitem__(self,idx):
         return self.X[idx], self.y[idx]
     
+# Multi Layer Percepton model 
+class BranchPredictorMLP(nn.Module):
+    def __init__(self, input_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 64), # From Input to hidden layer
+            nn.ReLU(),
+            nn.Dropout(0.3), # Turn off neurons (Reduce Overfitting)
 
+
+            nn.Linear(64, 32), # From first hidden layer to second hidden layer
+            nn.ReLU(),
+            nn.Dropout(0.2),
+
+            nn.Linear(32, 1) # from second hidden layer to output node
+        )
+
+    def forward(self, x):
+        return self.net(x)
         
     
 
@@ -114,11 +133,20 @@ def main():
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    # Create datasets/loaders
+    # Create datasets and loaders
     train_dataset = BranchDataset(X_train, y_train)
     test_dataset = BranchDataset(X_test, y_test)
 
+    train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False)
+
+    # Device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("\nUsing device:", device)
     
+    # Model
+    model = BranchPredictorMLP(input_dim=X_train.shape[1]) # Input is the number of features
+
 
 if __name__ == "__main__":
     main()
