@@ -22,6 +22,8 @@ class BranchDataset(Dataset):
     def __getitem__(self,idx):
         return self.X[idx], self.y[idx]
     
+
+    
 # Multi Layer Percepton model 
 class BranchPredictorMLP(nn.Module):
     def __init__(self, input_dim):
@@ -42,6 +44,28 @@ class BranchPredictorMLP(nn.Module):
     def forward(self, x):
         return self.net(x)
         
+
+def train_model(model, train_loader, criterion, optimizer, device, epochs=10):
+    model.to(device)
+
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+
+        for X_batch, y_batch in train_loader:
+            X_batch = X_batch.to(device)
+            y_batch = y_batch.to(device)
+
+            optimizer.zero_grad()
+            logits = model(X_batch)
+            loss = criterion(logits, y_batch)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+        avg_loss = running_loss / len(train_loader)
+        print(f"Epoch [{epoch+1}/{epochs}] - Loss: {avg_loss:.4f}")
     
 
 def load_data(path):
@@ -146,6 +170,13 @@ def main():
     
     # Model
     model = BranchPredictorMLP(input_dim=X_train.shape[1]) # Input is the number of features
+
+
+    # Loss optimizer
+    criterion = nn.BCEWithLogitsLoss() # How the model will measure error
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001) # How the model will update weights
+
+    train_model(model, train_loader, criterion, optimizer, device, epochs=10)
 
 
 if __name__ == "__main__":
