@@ -31,8 +31,11 @@ TEST_FILES = [
 
 CATEGORICAL_COLS = [
     "Opcode",
+<<<<<<< HEAD
     "t_successor_ends",
     "f_successor_ends",
+=======
+>>>>>>> a479ebc45ba85762646feebaab6cc866a16a3624
     "Routine_Type",
     "reg1",  "reg1_Op",
     "reg2",  "reg2_Op",
@@ -42,6 +45,7 @@ CATEGORICAL_COLS = [
     "wreg3", "wreg3_Op",
 ]
 
+<<<<<<< HEAD
 DROP_COLUMNS = ["Taken", "Executed", "Regs_Read",  "Regs_Write"]
 
 OPCODE_COLS = [
@@ -50,6 +54,8 @@ OPCODE_COLS = [
     "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5",
     ]
 
+=======
+>>>>>>> a479ebc45ba85762646feebaab6cc866a16a3624
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
@@ -91,10 +97,17 @@ def add_register_features(train_df, test_df):
 
         return result[0], result[1], result[2], result[3], result[4], result[5]
         
+<<<<<<< HEAD
     cols_w = ['wreg1', 'wreg1_Op', 'wreg2', 'wreg2_Op', 'wreg3', 'wreg3_Op']
     cols = ['reg1', 'reg1_Op', 'reg2', 'reg2_Op', 'reg3', 'reg3_Op']
 
     for df in (train_df,test_df):
+=======
+
+    for df in (train_df,test_df):
+        cols_w = ['wreg1', 'wreg1_Op', 'wreg2', 'wreg2_Op', 'wreg3', 'wreg3_Op']
+        cols = ['reg1', 'reg1_Op', 'reg2', 'reg2_Op', 'reg3', 'reg3_Op']
+>>>>>>> a479ebc45ba85762646feebaab6cc866a16a3624
         df[cols] = df["Regs_Read"].apply(get_context, result_type="expand")
         df[cols_w] = df["Regs_Write"].apply(get_context, result_type="expand")
 
@@ -105,6 +118,7 @@ def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     add_register_features(train_df,test_df)
     
     # Not needed columns
+<<<<<<< HEAD
     train_df = train_df.drop(columns = DROP_COLUMNS)
     test_df = test_df.drop(columns = DROP_COLUMNS)
 
@@ -115,6 +129,9 @@ def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     
 
     
+=======
+    nd_col= {''}
+>>>>>>> a479ebc45ba85762646feebaab6cc866a16a3624
 
 
     
