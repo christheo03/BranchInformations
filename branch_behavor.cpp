@@ -130,7 +130,7 @@ VOID Fini(INT32 code, VOID *v)
                << info.offset << ","
                << info.size << ","
                << "0x" << std::hex << info.flag_wr_instr.pc << std::dec << ","
-               << info.flag_wr_instr.opcode << ","
+               << OPCODE_StringShort(info.flag_wr_instr.opcode) << ","
                << info.flag_wr_instr.same_bbl << ","
                << info.routine_type << ",";
 
@@ -156,12 +156,12 @@ VOID Fini(INT32 code, VOID *v)
 
         // Prev Instructions
         for (int i = 0; i < NUM_PREV; i++) {
-            output << info.prev_instr[i].opcode << "," << info.prev_instr[i].size << ",";
+            output << OPCODE_StringShort(info.prev_instr[i].opcode) << "," << info.prev_instr[i].size << ",";
         }
 
         // Next Instructions
         for (int i = 0; i < NUM_PREV; i++) {
-            output << info.next_instr[i].opcode << "," << info.next_instr[i].size;
+            output << OPCODE_StringShort(info.next_instr[i].opcode) << "," << info.next_instr[i].size;
             if (i < NUM_PREV - 1) output << ","; // No comma after the very last element
         }
 

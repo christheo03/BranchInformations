@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-# Usage: python enrich_branches.py path/to/binary
-# Reads branches.csv (address in first column, hex), writes branches_enriched.csv.
+# Usage: python angrversion.py path/to/binary
+
+# Generates Control Flow Graph and Analyses Basic Block relationships. 
+# Takes Input conditional branch addresses and extends the csv file with information retrieved from the CFG
 
 import csv
 import logging
@@ -162,7 +164,7 @@ def analyze_branch(proj, cfg, addr, cache):
         insns = proj.factory.block(n.addr, size=n.size).capstone.insns
         if not insns:
             return "-1"
-        return insns[-1].mnemonic
+        return insns[-1].mnemonic.upper()
 
     def ends_with_call(x):
         op = last_opcode(x)
@@ -203,7 +205,7 @@ def main():
     proj = angr.Project(binary, auto_load_libs=False)
     cfg = proj.analyses.CFGFast(normalize=True)
 
-    # Load everything first; we'll overwrite branches.csv at the end.
+    
     with open("branches.csv", newline="") as fin:
         rows = list(csv.reader(fin))
 
