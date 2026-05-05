@@ -161,7 +161,21 @@ def add_register_features(train_df, test_df):
         df[cols_w] = pd.DataFrame(df["Regs_Write"].apply(get_context).tolist(),
                               index=df.index)
 
+# Input a group and converts it to 
+def encode_group(train_df, test_df , group):
+    le = LabelEncoder()
+    union = pd.concat([train_df[c].astype(str) for c in group], ignore_index=True)
+    le.fit(union)
+    known =set(le.classes_)
 
+    for col in group:
+        train_vals = train_df[col].astype(str)
+        test_vals  = test_df[col].astype(str)
+        test_vals  = test_vals.where(test_vals.isin(known), other=le.classes_[0])
+        train_df[col] = le.transform(train_vals)
+        test_df[col]  = le.transform(test_vals)
+
+    return le
 
 def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     # Register features splitted (read, write) 
@@ -176,81 +190,28 @@ def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     test_df = test_df.drop(columns = DROP_COLUMNS)
 
 
-    for col in  OPCODE_COLS:
-        train_df[col] = train_df[col].astype(str)
-        test_df[col] = test_df[col].astype(str)
+    reg_encoder=encode_group(train_df,test_df,REGS)
+    opcode_encoder=encode_group(train_df,test_df,OPCODE_COLS)
+    
+    # Encode Routine_Type with its fixed known vocabulary
+    train_df[ROUTINE_TYPE_COL] = train_df[ROUTINE_TYPE_COL].map(ROUTINE_TYPE_MAP)
+    test_df[ROUTINE_TYPE_COL]  = test_df[ROUTINE_TYPE_COL].map(ROUTINE_TYPE_MAP)
+
+    scaler = StandardScaler()
+    train_df[NUM_COLS] = scaler.fit_transform(train_df[NUM_COLS])
+    test_df[NUM_COLS] = scaler.transform(test_df[NUM_COLS])
 
     # Only feature columns
     feature_cols= [c for c in train_df.columns if c != 'y']
 
-    # Union the columns
-    cat_cols = list(set(CATEGORICAL_COLS) | set(OPCODE_COLS))
-    num_cols = [c for c in feature_cols if c not in cat_cols]
-
-    GROUPS = [
-        ["reg1", "reg2", "reg3", "wreg1", "wreg2", "wreg3"],# Register names (str)
-        ["Opcode","reg1_Op", "reg2_Op", "reg3_Op", "wreg1_Op", "wreg2_Op", "wreg3_Op"], # Opcodes  (str)
-        ["Flag_Instr_Opcode",
-         "Prev_Op_1", "Prev_Op_2", "Prev_Op_3", "Prev_Op_4", "Prev_Op_5",
-         "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5"], # Opcodes (int)
-        ]
-    
-    grouped = set()
-
-    # Encoder for each group
-    for group in GROUPS:
-        le = LabelEncoder()
-
-        group_union = pd.concat(
-            [train_df[c].astype(str) for c in group],
-            ignore_index=True,
-        )
-        le.fit(group_union)
-        known = set(le.classes_)
-
-        for col in group:
-            train_vals = train_df[col].astype(str)
-            test_vals = test_df[col].astype(str)
-            test_vals = test_vals.where(test_vals.isin(known), other = le.classes_[0])
-
-            train_df[col] = le.transform(train_vals)
-            test_df[col] = le.transform(test_vals)
-            grouped.add(col)
-
-    for col in cat_cols:
-        if col in grouped:
-            continue
-        le = LabelEncoder()
-        train_vals= train_df[col].astype(str)
-        test_vals = test_df[col].astype(str)
-
-        le.fit(train_vals)
-        known = set(le.classes_)
-        test_vals = test_vals.where(test_vals.isin(known), other=le.classes_[0])
-
-        train_df[col] = le.transform(train_vals)
-        test_df[col] = le.transform(test_vals)
-
-    if num_cols:
-        scaler = StandardScaler()
-        train_df[num_cols]=scaler.fit_transform(train_df[num_cols])
-        test_df[num_cols]= scaler.transform(test_df[num_cols])
-
-        # Tensors
+    # Tensors
     X_train = torch.tensor(train_df[feature_cols].values, dtype=torch.float32)
     y_train = torch.tensor(train_df["y"].values,         dtype=torch.float32)
     X_test  = torch.tensor(test_df[feature_cols].values, dtype=torch.float32)
     y_test  = torch.tensor(test_df["y"].values,          dtype=torch.float32)
 
-    return X_train, y_train, X_test, y_test, feature_cols
-
-
-
-
-
-
+    return X_train, y_train, X_test, y_test, feature_cols, reg_encoder, opcode_encoder
     
-
 def main():
     device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available()  else "cpu"
     print(f"Using {device} device")
@@ -269,7 +230,7 @@ def main():
     print(f"test  biased rate: {test_df ['y'].mean():.3f}")
 
     # 
-    X_train, y_train, X_test, y_test, feature_cols = build_features(train_df,test_df)
+    X_train, y_train, X_test, y_test, feature_cols, reg_enc, opc_enc = build_features(train_df,test_df)
 
     print("\n=== Returned tensors ===")
     print(f"feature count: {len(feature_cols)}")
@@ -290,9 +251,19 @@ def main():
     print(f"y_train mean (positive rate): {y_train.mean().item():.3f}")
     print(f"y_test  mean (positive rate): {y_test.mean().item():.3f}")
 
-    print("\n=== First row of X_train (all features) ===")
-    for name, val in zip(feature_cols, X_train[0].tolist()):
-        print(f"  {name:25s} {val:>10.3f}")
+    print("\n=== Register encoder ===")
+    print(f"vocabulary size: {len(reg_enc.classes_)}")
+    for i, name in enumerate(reg_enc.classes_):
+        print(f"  {i:3d} -> {name}")
+
+    print("\n=== Opcode encoder ===")
+    print(f"vocabulary size: {len(opc_enc.classes_)}")
+    for i, name in enumerate(opc_enc.classes_):
+        print(f"  {i:3d} -> {name}")
+
+    print("\n=== Routine_Type encoder ===")
+    for name, i in ROUTINE_TYPE_MAP.items():
+        print(f"  {i:3d} -> {name}")
 
 if __name__=="__main__":
     main()
