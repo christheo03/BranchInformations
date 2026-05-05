@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 
 
+# CONFIGURATIONS
+
 BATCH_SIZE=256
 EPOCHS = 20
 LR = 0.001
@@ -29,26 +31,86 @@ TEST_FILES = [
     "520.omnetpp_r",
 ]
 
-CATEGORICAL_COLS = [
+# COLUMNS (Features)
+
+# Register Columns store string values (Names of registers)
+REGS =[
+    "reg1",
+    "reg2",
+    "reg3",
+    "wreg1",
+    "wreg2",
+    "wreg3",
+]
+
+# Columns that need to get dropped
+DROP_COLUMNS = [
+    "Taken", 
+    "Executed", 
+    "Regs_Read",  
+    "Regs_Write", 
+    "branch_bb_addr", 
+    "taken_bb_addr", 
+    "fall_bb_addr"
+]
+
+# Opcode columns store string values (Names of Opcodes)
+OPCODE_COLS = [
     "Opcode",
     "t_successor_ends",
     "f_successor_ends",
-    "Routine_Type",
-    "reg1",  "reg1_Op",
-    "reg2",  "reg2_Op",
-    "reg3",  "reg3_Op",
-    "wreg1", "wreg1_Op",
-    "wreg2", "wreg2_Op",
-    "wreg3", "wreg3_Op",
-]
-
-DROP_COLUMNS = ["Taken", "Executed", "Regs_Read",  "Regs_Write"]
-
-OPCODE_COLS = [
     "Flag_Instr_Opcode",
+    "reg1_Op", "reg2_Op", "reg3_Op", "wreg1_Op", "wreg2_Op", "wreg3_Op",
     "Prev_Op_1", "Prev_Op_2", "Prev_Op_3", "Prev_Op_4", "Prev_Op_5",
     "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5",
-    ]
+]
+
+# Hex addresses 
+HEX_ADDR_COLS = ["Address", "Flag_Write_PC"]
+
+# Routine_Type has a known fixed vocabulary
+ROUTINE_TYPE_COL = "Routine_Type"
+ROUTINE_TYPE_MAP = {"NonLeaf": 0, "Leaf": 1, "Recursive": 2}
+
+# Size in bytes columns
+SIZE_COLS = [
+    "Size",
+    "Prev_Size_1", "Prev_Size_2", "Prev_Size_3", "Prev_Size_4", "Prev_Size_5",
+    "Next_Size_1", "Next_Size_2", "Next_Size_3", "Next_Size_4", "Next_Size_5",
+]
+
+# Offset column that holds value negative or positive
+OFFSET_COL = ["Offset"]
+
+# Columns that holds values -1,0,1
+BOOL_COLS= [
+    "br_is_loop_header",
+    "t_dominates",
+    "t_post_dominates",
+    "t_is_loop_head",
+    "t_is_backedge",
+    "t_is_loop_exit",
+    "t_has_call",
+    "f_dominates",
+    "f_post_dominates",
+    "f_is_loop_head",
+    "f_is_backedge",
+    "f_is_loop_exit",
+    "f_has_call", 
+    "Same_BBL" ,
+    "taken_ubd",
+    "fall_ubd", 
+    "taken_store",
+    "fall_store",
+]
+
+# All numerical columns
+NUM_COLS = (
+    SIZE_COLS
+    + OFFSET_COL
+    + BOOL_COLS
+    + HEX_ADDR_COLS
+)
 
 class NeuralNetwork(nn.Module):
     def __init__(self):
