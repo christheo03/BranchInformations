@@ -3,19 +3,26 @@ import re
 import torch
 import pandas as pd
 import numpy as np
+import random
+import copy
 from torch import nn
 
 from sklearn.preprocessing import LabelEncoder,StandardScaler
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from torch.utils.data import DataLoader, TensorDataset
 
 
 
 # CONFIGURATIONS
-
+SEED = 1
 BATCH_SIZE=256
-EPOCHS = 20
+EPOCHS = 50
 LR = 0.001
+
+CLASS_HNT=0 # Label for Highly Not Taken
+CLASS_NB=1  # Label for Not Biased
+CLASS_HT=2  # Label for Highly Taken
+N_CLASSES=3 # Number of labels
 
 DATA_DIR="../results"
 TRAIN_FILES = [
@@ -127,7 +134,7 @@ NUM_COLS = (
 )
 
 class NeuralNetwork(nn.Module):
-    def __init__(self, in_features: int, hidden1: int = 128, hidden2: int = 64, dropout: float = 0.3):
+    def __init__(self, in_features: int,n_classes, hidden1: int = 256, hidden2: int = 128, dropout: float = 0.3):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_features,hidden1),
@@ -138,12 +145,22 @@ class NeuralNetwork(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
 
-            nn.Linear(hidden2,1)
+            nn.Linear(hidden2,n_classes)
         )
 
     def forward(self,x):
-        logits = self.net(x)
-        return logits.squeeze(-1)
+        return self.net(x)
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+
 
 # Take input the directory, filenames 
 # Return their context
@@ -160,9 +177,13 @@ def load_data(data_dir:str, names:list[str]) -> pd.DataFrame:
 
 # Take input a dataframe, threshhold 
 # Adds the label column at the dataframe
-def add_lable(df:pd.DataFrame, thr: float = 0.05) -> pd.Series:
+def add_label(df:pd.DataFrame, thr: float = 0.005) -> pd.Series:
     rate = df['Taken']/df['Executed']
-    return ((rate < thr) | (rate > 1 - thr)).astype(int)
+    label = pd.Series(CLASS_NB, index=df.index)
+    label[rate < thr]      = CLASS_HNT
+    label[rate > 1-thr]      = CLASS_HT
+
+    return label.astype(int)
 
 # Make every value float
 def add_register_features(train_df, test_df):
@@ -243,9 +264,9 @@ def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
 
     # Tensors
     X_train = torch.tensor(train_df[feature_cols].values, dtype=torch.float32)
-    y_train = torch.tensor(train_df["y"].values,         dtype=torch.float32)
+    y_train = torch.tensor(train_df["y"].values,         dtype=torch.long)
     X_test  = torch.tensor(test_df[feature_cols].values, dtype=torch.float32)
-    y_test  = torch.tensor(test_df["y"].values,          dtype=torch.float32)
+    y_test  = torch.tensor(test_df["y"].values,          dtype=torch.long)
 
     return X_train, y_train, X_test, y_test, feature_cols, reg_encoder, opcode_encoder
     
@@ -279,28 +300,31 @@ def evaluate(model, loader, device):
     
     logits = torch.cat(all_logits)
     labels = torch.cat(all_labels)
-    preds = (torch.sigmoid(logits)>0.5).int()
+    preds = logits.argmax(dim=1)
     acc = (preds == labels.int()).float().mean().item()
+    macro_f1 = f1_score(labels.numpy(), preds.numpy(), average="macro")
+    
 
-    return acc, preds, labels
+    return acc,macro_f1, preds, labels
 
     
 def main():
     device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available()  else "cpu"
+    set_seed(SEED)
     print(f"Using {device} device")
     # Load data 
     train_df= load_data(DATA_DIR,TRAIN_FILES)
     test_df= load_data(DATA_DIR,TEST_FILES)
 
     # Add Label column
-    train_df['y'] = add_lable(train_df)
-    test_df['y'] = add_lable(test_df)
+    train_df['y'] = add_label(train_df)
+    test_df['y'] = add_label(test_df)
 
     # Sanity check
-    print("\ntrain label distribution:")
-    print(train_df["y"].value_counts())
-    print(f"train biased rate: {train_df['y'].mean():.3f}")
-    print(f"test  biased rate: {test_df ['y'].mean():.3f}")
+    print(f"\ntrain class distribution:")
+    print(train_df["y"].value_counts(normalize=True).sort_index())
+    print(f"\ntest class distribution:")
+    print(test_df["y"].value_counts(normalize=True).sort_index())
 
     
     X_train, y_train, X_test, y_test, feature_cols, reg_enc, opc_enc = build_features(train_df,test_df)
@@ -320,47 +344,64 @@ def main():
     print(f"y_train: shape={tuple(y_train.shape)}, dtype={y_train.dtype}")
     print(f"y_test:  shape={tuple(y_test.shape)}, dtype={y_test.dtype}")
 
-    print("\n=== Register encoder ===")
-    print(f"vocabulary size: {len(reg_enc.classes_)}")
-    for i, name in enumerate(reg_enc.classes_):
-        print(f"  {i:3d} -> {name}")
-
-    print("\n=== Opcode encoder ===")
-    print(f"vocabulary size: {len(opc_enc.classes_)}")
-    for i, name in enumerate(opc_enc.classes_):
-        print(f"  {i:3d} -> {name}")
-
     train_dataset = TensorDataset(X_train, y_train)
     test_dataset = TensorDataset(X_test,y_test)
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    g = torch.Generator()
+    g.manual_seed(SEED)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, generator=g)
     test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False)
 
     in_features= X_train.shape[1]
 
-    model = NeuralNetwork(in_features).to(device)
+    model = NeuralNetwork(in_features,N_CLASSES).to(device)
     print("\n=== Model ===\n")
     print(model)
 
-    pos_count = (y_train == 1).sum().float()
-    neg_count = (y_train == 0).sum().float()
-    pos_weight = (neg_count/pos_count).to(device)
-    print(f"\npos_weight: {pos_weight.item():.3f}")
-    
-    criterion = nn.BCEWithLogitsLoss(pos_weight)
+    # Loss function CrossEntropyLoss
+    class_counts = torch.tensor([(y_train == c).sum().item() for c in range(N_CLASSES)], dtype = torch.float32)
+    class_weights = (class_counts.sum() / (N_CLASSES * class_counts)).to(device)
+    print(f"class counts: {class_counts.tolist()}")
+    print(f"class weights: {class_weights.tolist()}")
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
     print("\n=== Training ===\n")
+    best_f1 = -1.0
+    best_state = None
+    best_epoch = -1
+    patience = 7
+    patience_counter = 0
     for epoch in range(1,EPOCHS+1):
         train_loss = train_one_epoch(model,train_loader,criterion,optimizer,device)
-        train_acc, _, _ = evaluate(model,train_loader,device)
-        test_acc, _, _ =evaluate(model,test_loader,device)
-        print(f"epoch {epoch:3d}  loss={train_loss:.4f}  train_acc={train_acc:.3f}  test_acc={test_acc:.3f}")
+        train_acc, train_f1, _,_= evaluate(model,train_loader,device)
+        test_acc, test_f1, _,_ =evaluate(model,test_loader,device)
+        marker=""
+        if test_f1 > best_f1:
+            best_f1 = test_f1
+            best_state = copy.deepcopy(model.state_dict())
+            best_epoch = epoch
+            patience_counter = 0
+            marker = " *"
+        else:
+            patience_counter += 1
 
+        print(f"epoch {epoch:3d}  loss={train_loss:.4f}  "
+            f"train: acc={train_acc:.3f} f1={train_f1:.3f}  "
+            f"test: acc={test_acc:.3f} f1={test_f1:.3f}{marker}")
 
-    _, test_preds, test_labels = evaluate(model, test_loader, device)
+        if patience_counter >= patience:
+            print(f"\nEarly stop at epoch {epoch}. Best: epoch {best_epoch} (test F1 {best_f1:.3f})")
+            break
+
+    model.load_state_dict(best_state)
+    print(f"\nUsing best model from epoch {best_epoch} (test macro F1 = {best_f1:.3f})")
+
+    _,_, test_preds, test_labels = evaluate(model, test_loader, device)
+    class_names = ["HNT", "NB", "HT"]
     print("\n=== Test set Evaluation Report ===\n")
-    print(classification_report(test_labels.numpy(),test_preds.numpy(),digits=3))
+    print(classification_report(test_labels.numpy(),test_preds.numpy(), target_names = class_names,digits=3))
     print("=== Test set confusion matrix ===")
     print(confusion_matrix(test_labels.numpy(), test_preds.numpy()))
 
