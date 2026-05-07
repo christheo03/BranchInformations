@@ -4,10 +4,10 @@ import torch
 import pandas as pd
 import numpy as np
 import random
-import copy
 from torch import nn
 
-from sklearn.preprocessing import LabelEncoder,StandardScaler
+from sklearn.preprocessing import StandardScaler,OneHotEncoder
+from scipy.sparse import hstack
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -135,7 +135,7 @@ NUM_COLS = (
 )
 
 class NeuralNetwork(nn.Module):
-    def __init__(self, in_features: int,n_classes, hidden1: int = 256, hidden2: int = 128, dropout: float = 0.1):
+    def __init__(self, in_features: int,n_classes, hidden1: int = 256, hidden2: int = 128, dropout: float = 0.2):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_features,hidden1),
@@ -215,20 +215,6 @@ def add_register_features(train_df, test_df):
                               index=df.index)
 
 # Input a group and converts it to 
-def encode_group(train_df, test_df , group):
-    le = LabelEncoder()
-    union = pd.concat([train_df[c].astype(str) for c in group], ignore_index=True)
-    le.fit(union)
-    known =set(le.classes_)
-
-    for col in group:
-        train_vals = train_df[col].astype(str)
-        test_vals  = test_df[col].astype(str)
-        test_vals  = test_vals.where(test_vals.isin(known), other=le.classes_[0])
-        train_df[col] = le.transform(train_vals)
-        test_df[col]  = le.transform(test_vals)
-
-    return le
 
 def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     # Register features splitted (read, write) 
@@ -242,36 +228,49 @@ def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     train_df = train_df.drop(columns = DROP_COLUMNS)
     test_df = test_df.drop(columns = DROP_COLUMNS)
 
+    cat_cols = REGS + OPCODE_COLS + [ROUTINE_TYPE_COL]
 
-    reg_encoder=encode_group(train_df,test_df,REGS)
-    opcode_encoder=encode_group(train_df,test_df,OPCODE_COLS)
-    
-
-    # Encode Routine_Type with its fixed known vocabulary
-    train_df[ROUTINE_TYPE_COL] = train_df[ROUTINE_TYPE_COL].map(ROUTINE_TYPE_MAP)
-    test_df[ROUTINE_TYPE_COL]  = test_df[ROUTINE_TYPE_COL].map(ROUTINE_TYPE_MAP)
-
-    # Fill any missing values in numeric columns with 0
     for col in NUM_COLS:
-        train_df[col] = train_df[col].fillna(0)
-        test_df[col]  = test_df[col].fillna(0)
+        train_df[col]= train_df[col].fillna(0)
+        test_df[col]= test_df[col].fillna(0)
+    
+    for col in cat_cols:
+        train_df[col] = train_df[col].fillna("-1").astype(str)
+        test_df[col] = test_df[col].fillna("-1").astype(str)
         
     scaler = StandardScaler()
     scaler.fit(train_df[NUM_COLS])
     scaler.scale_[scaler.scale_ == 0] = 1.0
-    train_df[NUM_COLS] = scaler.transform(train_df[NUM_COLS])
-    test_df[NUM_COLS] = scaler.transform(test_df[NUM_COLS])
 
-    # Only feature columns
-    feature_cols= [c for c in train_df.columns if c != 'y']
+    x_train_num= scaler.transform(train_df[NUM_COLS])
+    x_test_num = scaler.transform(test_df[NUM_COLS])
 
-    # Tensors
-    X_train = torch.tensor(train_df[feature_cols].values, dtype=torch.float32)
-    y_train = torch.tensor(train_df["y"].values,         dtype=torch.long)
-    X_test  = torch.tensor(test_df[feature_cols].values, dtype=torch.float32)
-    y_test  = torch.tensor(test_df["y"].values,          dtype=torch.long)
 
-    return X_train, y_train, X_test, y_test, feature_cols, reg_encoder, opcode_encoder
+    encoder = OneHotEncoder(handle_unknown="ignore",sparse_output=True)
+
+    x_train_cat= encoder.fit_transform(train_df[cat_cols])
+    x_test_cat = encoder.transform(test_df[cat_cols])
+
+    fea_names= encoder.get_feature_names_out(cat_cols)
+
+    x_train_all = hstack([x_train_num, x_train_cat]).toarray()
+    x_test_all = hstack([x_test_num, x_test_cat]).toarray()
+
+    feature_cols = list(NUM_COLS) + list(fea_names)
+
+    X_train = torch.tensor(x_train_all, dtype=torch.float32)
+    y_train = torch.tensor(train_df["y"].values, dtype=torch.long)
+
+    X_test = torch.tensor(x_test_all, dtype=torch.float32)
+    y_test = torch.tensor(test_df["y"].values, dtype=torch.long)
+
+    train_cat = train_df[cat_cols].copy()
+
+    return X_train, y_train, X_test, y_test, feature_cols, encoder, cat_cols, train_cat
+
+
+
+    
     
 def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
@@ -330,7 +329,7 @@ def main():
     print(test_df["y"].value_counts(normalize=True).sort_index())
 
     
-    X_train, y_train, X_test, y_test, feature_cols, reg_enc, opc_enc = build_features(train_df,test_df)
+    X_train, y_train, X_test, y_test, feature_cols, oneHot_encoder, cat_cols,train_cat = build_features(train_df,test_df)
     nan_cols = []
     for i, col in enumerate(feature_cols):
         if torch.isnan(X_train[:, i]).any():
@@ -338,8 +337,27 @@ def main():
             nan_cols.append((col, n_nan))
             print(f"NaN in column {col}: {n_nan} rows")
 
+    onehot_feature_names = oneHot_encoder.get_feature_names_out(cat_cols)
+
+    print("\n=== OneHotEncoder Info ===")
+    print(f"Categorical columns: {len(cat_cols)}")
+    print(f"One-hot categorical features: {len(onehot_feature_names)}")
+    print(f"Total input features: {X_train.shape[1]}")
+
+    print("\n=== Example Active One-Hot Features ===")
+    sample = train_cat.iloc[:3]
+    encoded_sample = oneHot_encoder.transform(sample).toarray()
+
+    for i in range(len(sample)):
+        print("\nOriginal:")
+        print(sample.iloc[i])
+
+        print("\nActive One-Hot Features:")
+        active = np.where(encoded_sample[i] == 1)[0]
+        for idx in active:
+            print(f"  {onehot_feature_names[idx]}")
     if not nan_cols:
-        print("No NaN columns found in tensor — must be from scaler scale_=0")
+        print("No NaN columns found in tensor")
     print("\n=== Returned tensors ===")
     print(f"feature count: {len(feature_cols)}")
     print(f"X_train: shape={tuple(X_train.shape)}, dtype={X_train.dtype}")
