@@ -135,14 +135,16 @@ NUM_COLS = (
 )
 
 class NeuralNetwork(nn.Module):
-    def __init__(self, in_features: int,n_classes, hidden1: int = 256, hidden2: int = 128, dropout: float = 0.3):
+    def __init__(self, in_features: int,n_classes, hidden1: int = 256, hidden2: int = 128, dropout: float = 0.1):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_features,hidden1),
+            nn.BatchNorm1d(hidden1),
             nn.ReLU(),
             nn.Dropout(dropout),
             
             nn.Linear(hidden1,hidden2),
+            nn.BatchNorm1d(hidden2),
             nn.ReLU(),
             nn.Dropout(dropout),
 
@@ -257,7 +259,7 @@ def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     scaler = StandardScaler()
     scaler.fit(train_df[NUM_COLS])
     scaler.scale_[scaler.scale_ == 0] = 1.0
-    train_df[NUM_COLS] = scaler.fit_transform(train_df[NUM_COLS])
+    train_df[NUM_COLS] = scaler.transform(train_df[NUM_COLS])
     test_df[NUM_COLS] = scaler.transform(test_df[NUM_COLS])
 
     # Only feature columns
