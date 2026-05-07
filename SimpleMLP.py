@@ -66,8 +66,6 @@ REGS =[
 
 # Columns that need to get dropped
 DROP_COLUMNS = [
-    "Address",
-    "Flag_Write_PC",
     "Taken", 
     "Executed", 
     "Regs_Read",  
@@ -87,6 +85,10 @@ OPCODE_COLS = [
     "Prev_Op_1", "Prev_Op_2", "Prev_Op_3", "Prev_Op_4", "Prev_Op_5",
     "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5",
 ]
+
+# Hex addresses 
+HEX_ADDR_COLS = [    "Address",
+    "Flag_Write_PC",]
 
 # Routine_Type has a known fixed vocabulary
 ROUTINE_TYPE_COL = "Routine_Type"
@@ -129,6 +131,7 @@ NUM_COLS = (
     SIZE_COLS
     + OFFSET_COL
     + BOOL_COLS
+    + HEX_ADDR_COLS
 )
 
 class NeuralNetwork(nn.Module):
@@ -229,9 +232,14 @@ def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     # Register features splitted (read, write) 
     add_register_features(train_df,test_df)
 
+    for col in HEX_ADDR_COLS:
+        train_df[col] = train_df[col].apply(lambda x: int(x,16))
+        test_df[col] = test_df[col].apply(lambda x: int(x,16))
+
     # Not needed columns
     train_df = train_df.drop(columns = DROP_COLUMNS)
     test_df = test_df.drop(columns = DROP_COLUMNS)
+
 
     reg_encoder=encode_group(train_df,test_df,REGS)
     opcode_encoder=encode_group(train_df,test_df,OPCODE_COLS)
@@ -361,40 +369,24 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
     print("\n=== Training ===\n")
-    best_f1 = -1.0
-    best_state = None
-    best_epoch = -1
-    patience = 7
-    patience_counter = 0
+
     for epoch in range(1,EPOCHS+1):
         train_loss = train_one_epoch(model,train_loader,criterion,optimizer,device)
         train_acc, train_f1, _,_= evaluate(model,train_loader,device)
-        test_acc, test_f1, _,_ =evaluate(model,test_loader,device)
-        marker=""
-        if test_f1 > best_f1:
-            best_f1 = test_f1
-            best_state = copy.deepcopy(model.state_dict())
-            best_epoch = epoch
-            patience_counter = 0
-            marker = " *"
-        else:
-            patience_counter += 1
 
         print(f"epoch {epoch:3d}  loss={train_loss:.4f}  "
-            f"train: acc={train_acc:.3f} f1={train_f1:.3f}  "
-            f"test: acc={test_acc:.3f} f1={test_f1:.3f}{marker}")
+            f"train: acc={train_acc:.3f} f1={train_f1:.3f}  ")
+    
 
-        if patience_counter >= patience:
-            print(f"\nEarly stop at epoch {epoch}. Best: epoch {best_epoch} (test F1 {best_f1:.3f})")
-            break
+    print(f"\nFinished training for {EPOCHS} epochs.")
+    test_acc, test_f1,test_preds, test_labels = evaluate(model, test_loader, device)
+    print(f"\nFinal test: acc={test_acc:.3f} f1={test_f1:.3f}")
 
-    model.load_state_dict(best_state)
-    print(f"\nUsing best model from epoch {best_epoch} (test macro F1 = {best_f1:.3f})")
-
-    _,_, test_preds, test_labels = evaluate(model, test_loader, device)
     class_names = ["HNT", "NB", "HT"]
+
     print("\n=== Test set Evaluation Report ===\n")
-    print(classification_report(test_labels.numpy(),test_preds.numpy(), target_names = class_names,digits=3))
+    print(classification_report(test_labels.numpy(), test_preds.numpy(), target_names=class_names, digits=3))
+
     print("=== Test set confusion matrix ===")
     print(confusion_matrix(test_labels.numpy(), test_preds.numpy()))
 
