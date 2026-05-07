@@ -66,6 +66,8 @@ REGS =[
 
 # Columns that need to get dropped
 DROP_COLUMNS = [
+    "Address",
+    "Flag_Write_PC",
     "Taken", 
     "Executed", 
     "Regs_Read",  
@@ -85,9 +87,6 @@ OPCODE_COLS = [
     "Prev_Op_1", "Prev_Op_2", "Prev_Op_3", "Prev_Op_4", "Prev_Op_5",
     "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5",
 ]
-
-# Hex addresses 
-HEX_ADDR_COLS = ["Address", "Flag_Write_PC"]
 
 # Routine_Type has a known fixed vocabulary
 ROUTINE_TYPE_COL = "Routine_Type"
@@ -130,7 +129,6 @@ NUM_COLS = (
     SIZE_COLS
     + OFFSET_COL
     + BOOL_COLS
-    + HEX_ADDR_COLS
 )
 
 class NeuralNetwork(nn.Module):
@@ -230,15 +228,10 @@ def encode_group(train_df, test_df , group):
 def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     # Register features splitted (read, write) 
     add_register_features(train_df,test_df)
-    if "Address" in train_df.columns and "Flag_Write_PC" in train_df.columns:
-        for col in ["Address","Flag_Write_PC"]:
-            train_df[col] = train_df[col].apply(lambda x: int(x,16))
-            test_df[col] = test_df[col].apply(lambda x: int(x,16))
 
     # Not needed columns
     train_df = train_df.drop(columns = DROP_COLUMNS)
     test_df = test_df.drop(columns = DROP_COLUMNS)
-
 
     reg_encoder=encode_group(train_df,test_df,REGS)
     opcode_encoder=encode_group(train_df,test_df,OPCODE_COLS)
