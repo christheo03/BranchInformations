@@ -6,8 +6,7 @@ import numpy as np
 import random
 from torch import nn
 
-from sklearn.preprocessing import StandardScaler,OneHotEncoder
-from scipy.sparse import hstack
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -15,6 +14,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 # CONFIGURATIONS
 SEED = 1
+EMBED_DIM=16
 BATCH_SIZE=256
 EPOCHS = 50
 LR = 0.001
@@ -92,7 +92,6 @@ HEX_ADDR_COLS = [    "Address",
 
 # Routine_Type has a known fixed vocabulary
 ROUTINE_TYPE_COL = "Routine_Type"
-ROUTINE_TYPE_MAP = {"NonLeaf": 0, "Leaf": 1, "Recursive": 2}
 
 # Size in bytes columns
 SIZE_COLS = [
@@ -134,25 +133,40 @@ NUM_COLS = (
     + HEX_ADDR_COLS
 )
 
-class NeuralNetwork(nn.Module):
-    def __init__(self, in_features: int,n_classes, hidden1: int = 256, hidden2: int = 128, dropout: float = 0.2):
+class NeuralNetworkWithEmbeddings(nn.Module):
+    def __init__(self, vocab_sizes, embed_dim, num_features, n_classes,
+                 hidden1=256, hidden2=128, dropout=0.2):
         super().__init__()
+
+        self.embeddings = nn.ModuleList([
+            nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+            for vocab_size in vocab_sizes
+        ])
+
+        in_features = num_features + len(vocab_sizes) * embed_dim
+
         self.net = nn.Sequential(
-            nn.Linear(in_features,hidden1),
+            nn.Linear(in_features, hidden1),
             nn.BatchNorm1d(hidden1),
             nn.ReLU(),
             nn.Dropout(dropout),
-            
-            nn.Linear(hidden1,hidden2),
+
+            nn.Linear(hidden1, hidden2),
             nn.BatchNorm1d(hidden2),
             nn.ReLU(),
             nn.Dropout(dropout),
 
-            nn.Linear(hidden2,n_classes)
+            nn.Linear(hidden2, n_classes)
         )
 
-    def forward(self,x):
+    def forward(self, x_num, x_cat):
+        embedded = [emb(x_cat[:, i]) for i, emb in enumerate(self.embeddings)]
+        x_cat_embedded = torch.cat(embedded, dim=1)  
+
+        x = torch.cat([x_num, x_cat_embedded], dim=1)  
         return self.net(x)
+    
+
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -214,7 +228,16 @@ def add_register_features(train_df, test_df):
         df[cols_w] = pd.DataFrame(df["Regs_Write"].apply(get_context).tolist(),
                               index=df.index)
 
-# Input a group and converts it to 
+
+
+def vocab_build(train_df,test_df,cat_cols):
+    vocabs = {}
+    for col in cat_cols:
+        unique_vals = train_df[col].unique()
+        vocab = {val: idx+1 for idx, val in enumerate(unique_vals)}
+        vocabs[col] = vocab
+    return vocabs
+
 
 def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     # Register features splitted (read, write) 
@@ -245,28 +268,30 @@ def build_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     x_train_num= scaler.transform(train_df[NUM_COLS])
     x_test_num = scaler.transform(test_df[NUM_COLS])
 
+    vocabs = vocab_build(train_df, test_df, cat_cols)
+    vocab_sizes = []
+    train_cat_indices = []
+    test_cat_indices  = []
 
-    encoder = OneHotEncoder(handle_unknown="ignore",sparse_output=True)
+    for col in cat_cols:
+        vocab = vocabs[col]
+        vocab_sizes.append(len(vocab) + 1)  # +1 for unknown (index 0)
 
-    x_train_cat= encoder.fit_transform(train_df[cat_cols])
-    x_test_cat = encoder.transform(test_df[cat_cols])
+        train_cat_indices.append(
+            train_df[col].map(lambda x: vocab.get(x, 0)).values
+        )
+        test_cat_indices.append(
+            test_df[col].map(lambda x: vocab.get(x, 0)).values
+        )
 
-    fea_names= encoder.get_feature_names_out(cat_cols)
+    # Shape: (n_samples, n_cat_cols)
+    X_train_cat = torch.tensor(np.stack(train_cat_indices, axis=1), dtype=torch.long)
+    X_test_cat  = torch.tensor(np.stack(test_cat_indices,  axis=1), dtype=torch.long)
 
-    x_train_all = hstack([x_train_num, x_train_cat]).toarray()
-    x_test_all = hstack([x_test_num, x_test_cat]).toarray()
-
-    feature_cols = list(NUM_COLS) + list(fea_names)
-
-    X_train = torch.tensor(x_train_all, dtype=torch.float32)
     y_train = torch.tensor(train_df["y"].values, dtype=torch.long)
+    y_test  = torch.tensor(test_df["y"].values,  dtype=torch.long)
 
-    X_test = torch.tensor(x_test_all, dtype=torch.float32)
-    y_test = torch.tensor(test_df["y"].values, dtype=torch.long)
-
-    train_cat = train_df[cat_cols].copy()
-
-    return X_train, y_train, X_test, y_test, feature_cols, encoder, cat_cols, train_cat
+    return x_train_num, X_train_cat, y_train, x_test_num, X_test_cat, y_test, vocab_sizes
 
 
 
@@ -276,17 +301,17 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
     total_loss = 0.0
     n_samples = 0
-    for xb, yb in loader:
-        xb, yb =xb.to(device), yb.to(device)
-        
+    for x_num, x_cat, yb in loader:
+        x_num, x_cat, yb = x_num.to(device), x_cat.to(device), yb.to(device)
+
         optimizer.zero_grad()
-        logits = model(xb)
+        logits = model(x_num, x_cat)
         loss = criterion(logits, yb)
         loss.backward()
         optimizer.step()
 
-        total_loss+= loss.item() * xb.size(0)
-        n_samples += xb.size(0)
+        total_loss += loss.item() * x_num.size(0)
+        n_samples  += x_num.size(0)
 
     return total_loss/n_samples
     
@@ -294,9 +319,9 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
 def evaluate(model, loader, device):
     model.eval()
     all_logits, all_labels = [], []
-    for xb, yb in loader:
-        xb = xb.to(device)
-        logits = model(xb).cpu()
+    for x_num, x_cat, yb in loader:
+        x_num, x_cat = x_num.to(device), x_cat.to(device)
+        logits = model(x_num, x_cat).cpu()
         all_logits.append(logits)
         all_labels.append(yb)
     
@@ -328,74 +353,53 @@ def main():
     print(f"\ntest class distribution:")
     print(test_df["y"].value_counts(normalize=True).sort_index())
 
-    
-    X_train, y_train, X_test, y_test, feature_cols, oneHot_encoder, cat_cols,train_cat = build_features(train_df,test_df)
-    nan_cols = []
-    for i, col in enumerate(feature_cols):
-        if torch.isnan(X_train[:, i]).any():
-            n_nan = torch.isnan(X_train[:, i]).sum().item()
-            nan_cols.append((col, n_nan))
-            print(f"NaN in column {col}: {n_nan} rows")
+    X_train_num, X_train_cat, y_train,X_test_num, X_test_cat, y_test, vocab_sizes = build_features(train_df, test_df)
 
-    onehot_feature_names = oneHot_encoder.get_feature_names_out(cat_cols)
+    print(f"Numeric features   : {X_train_num.shape[1]}")
+    print(f"Categorical columns: {X_train_cat.shape[1]}")
+    print(f"Embed dim          : {EMBED_DIM}")
+    print(f"Total embed output : {X_train_cat.shape[1] * EMBED_DIM}")
+    print(f"Total input to MLP : {X_train_num.shape[1] + X_train_cat.shape[1] * EMBED_DIM}")
 
-    print("\n=== OneHotEncoder Info ===")
-    print(f"Categorical columns: {len(cat_cols)}")
-    print(f"One-hot categorical features: {len(onehot_feature_names)}")
-    print(f"Total input features: {X_train.shape[1]}")
+    X_train_num = torch.tensor(X_train_num, dtype=torch.float32)
+    X_test_num  = torch.tensor(X_test_num,  dtype=torch.float32)
 
-    print("\n=== Example Active One-Hot Features ===")
-    sample = train_cat.iloc[:3]
-    encoded_sample = oneHot_encoder.transform(sample).toarray()
-
-    for i in range(len(sample)):
-        print("\nOriginal:")
-        print(sample.iloc[i])
-
-        print("\nActive One-Hot Features:")
-        active = np.where(encoded_sample[i] == 1)[0]
-        for idx in active:
-            print(f"  {onehot_feature_names[idx]}")
-    if not nan_cols:
-        print("No NaN columns found in tensor")
-    print("\n=== Returned tensors ===")
-    print(f"feature count: {len(feature_cols)}")
-    print(f"X_train: shape={tuple(X_train.shape)}, dtype={X_train.dtype}")
-    print(f"X_test:  shape={tuple(X_test.shape)}, dtype={X_test.dtype}")
-    print(f"y_train: shape={tuple(y_train.shape)}, dtype={y_train.dtype}")
-    print(f"y_test:  shape={tuple(y_test.shape)}, dtype={y_test.dtype}")
-
-    train_dataset = TensorDataset(X_train, y_train)
-    test_dataset = TensorDataset(X_test,y_test)
+    train_dataset = TensorDataset(X_train_num, X_train_cat, y_train)
+    test_dataset  = TensorDataset(X_test_num,  X_test_cat,  y_test)
 
     g = torch.Generator()
     g.manual_seed(SEED)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, generator=g)
     test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False)
 
-    in_features= X_train.shape[1]
-
-    model = NeuralNetwork(in_features,N_CLASSES).to(device)
+    model = NeuralNetworkWithEmbeddings(
+        vocab_sizes  = vocab_sizes,
+        embed_dim    = EMBED_DIM,
+        num_features = X_train_num.shape[1],
+        n_classes    = N_CLASSES
+    ).to(device)
     print("\n=== Model ===\n")
     print(model)
 
-    # Loss function CrossEntropyLoss
-    class_counts = torch.tensor([(y_train == c).sum().item() for c in range(N_CLASSES)], dtype = torch.float32)
+    class_counts = torch.tensor([(y_train == c).sum().item() for c in range(N_CLASSES)], dtype=torch.float32)
     class_weights = (class_counts.sum() / (N_CLASSES * class_counts)).to(device)
-    print(f"class counts: {class_counts.tolist()}")
+    print(f"class counts : {class_counts.tolist()}")
     print(f"class weights: {class_weights.tolist()}")
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-5)
 
     print("\n=== Training ===\n")
 
     for epoch in range(1,EPOCHS+1):
         train_loss = train_one_epoch(model,train_loader,criterion,optimizer,device)
         train_acc, train_f1, _,_= evaluate(model,train_loader,device)
-
+        scheduler.step()
+        current_lr = scheduler.get_last_lr()[0]
         print(f"epoch {epoch:3d}  loss={train_loss:.4f}  "
-            f"train: acc={train_acc:.3f} f1={train_f1:.3f}  ")
+            f"train: acc={train_acc:.3f} f1={train_f1:.3f}  "
+            f"lr={current_lr:.6f}")
     
 
     print(f"\nFinished training for {EPOCHS} epochs.")
