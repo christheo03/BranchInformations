@@ -23,14 +23,14 @@ CLASS_HT  = 2
 N_CLASSES = 3
 
 DATA_DIR = "../results"
-TRAIN_FILES = [
+
+ALL_FILES = [
     "500.perlbench_r", "502.gcc_r", "505.mcf_r", "507.cactuBSSN_r",
     "508.namd_r", "510.parest_r", "511.povray_r", "519.lbm_r",
-    "523.xalancbmk_r", "525.x264_r", "526.blender_r", "527.cam4_r",
-    "531.deepsjeng_r", "538.imagick_r", "541.leela_r", "544.nab_r", "554.roms_r",
-]
-TEST_FILES = [
-    "520.omnetpp_r", "549.fotonik3d_r", "557.xz_r", "503.bwaves_r", "548.exchange2_r",
+    "520.omnetpp_r", "523.xalancbmk_r", "525.x264_r", "526.blender_r",
+    "527.cam4_r", "531.deepsjeng_r", "538.imagick_r", "541.leela_r",
+    "544.nab_r", "548.exchange2_r", "549.fotonik3d_r", "554.roms_r",
+    "557.xz_r", "503.bwaves_r",
 ]
 
 REG_COLS = ["reg1", "reg2", "reg3", "wreg1", "wreg2", "wreg3"]
@@ -249,33 +249,19 @@ def evaluate(model, loader, device):
     return acc, macro_f1, preds, labels
 
 
-def main():
-    device = torch.accelerator.current_accelerator().type \
-             if torch.accelerator.is_available() else "cpu"
-    set_seed(SEED)
-    print(f"Using {device} device")
+def run_loo(held_out_file, device):
+    train_files = [f for f in ALL_FILES if f != held_out_file]
 
-    train_df = load_data(DATA_DIR, TRAIN_FILES)
-    test_df  = load_data(DATA_DIR, TEST_FILES)
+    set_seed(SEED)
+
+    train_df = load_data(DATA_DIR, train_files)
+    test_df  = load_data(DATA_DIR, [held_out_file])
     train_df['y'] = add_label(train_df)
     test_df['y']  = add_label(test_df)
 
-    print(f"\ntrain class distribution:")
-    print(train_df["y"].value_counts(normalize=True).sort_index())
-    print(f"\ntest class distribution:")
-    print(test_df["y"].value_counts(normalize=True).sort_index())
-
     (X_train_num, X_train_cat, y_train,
      X_test_num,  X_test_cat,  y_test,
-     reg_vocab_size, opc_vocab_size, rout_vocab_size) = build_features(train_df, test_df)
-
-    print(f"\nnum features: {X_train_num.shape[1]}")
-    print(f"cat features: {X_train_cat.shape[1]}")
-    print(f"X_train_num:  {tuple(X_train_num.shape)}")
-    print(f"X_train_cat:  {tuple(X_train_cat.shape)}")
-    print(f"reg vocab:    {reg_vocab_size}")
-    print(f"opc vocab:    {opc_vocab_size}")
-    print(f"rout vocab:   {rout_vocab_size}")
+     reg_vs, opc_vs, rout_vs) = build_features(train_df, test_df)
 
     g = torch.Generator()
     g.manual_seed(SEED)
@@ -285,59 +271,81 @@ def main():
                               batch_size=BATCH_SIZE, shuffle=False)
 
     model = NeuralNetworkWithEmbeddings(
-        reg_vocab_size  = reg_vocab_size,
-        opc_vocab_size  = opc_vocab_size,
-        rout_vocab_size = rout_vocab_size,
+        reg_vocab_size  = reg_vs,
+        opc_vocab_size  = opc_vs,
+        rout_vocab_size = rout_vs,
         embed_dim       = EMBED_DIM,
         num_features    = X_train_num.shape[1],
         n_classes       = N_CLASSES,
     ).to(device)
 
-    print(f"\n=== Model ===")
-    print(model)
-    print(f"trainable parameters: {sum(p.numel() for p in model.parameters()):,}")
-
-    class_counts  = torch.tensor([(y_train == c).sum().item() for c in range(N_CLASSES)],
-                                  dtype=torch.float32)
-    print(f"\nclass counts: {class_counts.tolist()}")
-
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=1e-4)
 
     best_f1, best_state, best_epoch = -1.0, None, -1
-    patience, patience_counter      = PATIENCE, 0
+    patience_counter = 0
 
-    print(f"\n=== Training ===\n")
     for epoch in range(1, EPOCHS + 1):
-        train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device)
-        train_acc, train_f1, _, _ = evaluate(model, train_loader, device)
-        test_acc,  test_f1,  _, _ = evaluate(model, test_loader,  device)
+        train_one_epoch(model, train_loader, criterion, optimizer, device)
+        _, test_f1, _, _ = evaluate(model, test_loader, device)
 
-        marker = ""
         if test_f1 > best_f1:
             best_f1, best_state, best_epoch = test_f1, copy.deepcopy(model.state_dict()), epoch
             patience_counter = 0
-            marker = " *"
         else:
             patience_counter += 1
 
-        print(f"epoch {epoch:3d}  loss={train_loss:.4f}  "
-              f"train: acc={train_acc:.3f} f1={train_f1:.3f}  "
-              f"test: acc={test_acc:.3f} f1={test_f1:.3f}{marker}")
-
-        if patience_counter >= patience:
-            print(f"\nEarly stop at epoch {epoch}. Best: epoch {best_epoch} (test F1 {best_f1:.3f})")
+        if patience_counter >= PATIENCE:
             break
 
     model.load_state_dict(best_state)
-    print(f"\nUsing best model from epoch {best_epoch} (test macro F1 = {best_f1:.3f})")
+    acc, f1, preds, labels = evaluate(model, test_loader, device)
+    return acc, f1, preds, labels, best_epoch
 
-    _, _, test_preds, test_labels = evaluate(model, test_loader, device)
-    print("\n=== Test set Evaluation Report ===\n")
-    print(classification_report(test_labels.numpy(), test_preds.numpy(),
-                                target_names=["HNT", "NB", "HT"], digits=3))
-    print("=== Test set confusion matrix ===")
-    print(confusion_matrix(test_labels.numpy(), test_preds.numpy()))
+
+def main():
+    device = torch.accelerator.current_accelerator().type \
+             if torch.accelerator.is_available() else "cpu"
+    print(f"Using {device} device")
+    print(f"Leave-one-out over {len(ALL_FILES)} benchmarks\n")
+
+    results = []
+
+    for i, held_out in enumerate(ALL_FILES):
+        print(f"\n{'='*60}")
+        print(f"Run {i+1}/{len(ALL_FILES)}  held out: {held_out}")
+        print(f"{'='*60}")
+
+        acc, f1, preds, labels, best_epoch = run_loo(held_out, device)
+
+        print(f"Best epoch: {best_epoch}  acc={acc:.3f}  macro_f1={f1:.3f}")
+        print(classification_report(labels.numpy(), preds.numpy(),
+                                    target_names=["HNT","NB","HT"], digits=3))
+
+        results.append({
+            "file":      held_out,
+            "accuracy":  acc,
+            "macro_f1":  f1,
+            "n_test":    len(labels),
+            "best_epoch": best_epoch,
+        })
+
+    print(f"\n{'='*60}")
+    print(f"LEAVE-ONE-OUT SUMMARY")
+    print(f"{'='*60}")
+    print(f"{'File':<30} {'Acc':>7} {'F1':>7} {'N':>7} {'Epoch':>7}")
+    print("-" * 60)
+    for r in results:
+        print(f"{r['file']:<30} {r['accuracy']:>7.3f} {r['macro_f1']:>7.3f} "
+              f"{r['n_test']:>7} {r['best_epoch']:>7}")
+
+    accs = [r['accuracy'] for r in results]
+    f1s  = [r['macro_f1'] for r in results]
+    print("-" * 60)
+    print(f"{'Mean':<30} {np.mean(accs):>7.3f} {np.mean(f1s):>7.3f}")
+    print(f"{'Std':<30} {np.std(accs):>7.3f} {np.std(f1s):>7.3f}")
+    print(f"{'Min':<30} {np.min(accs):>7.3f} {np.min(f1s):>7.3f}")
+    print(f"{'Max':<30} {np.max(accs):>7.3f} {np.max(f1s):>7.3f}")
 
 
 if __name__ == "__main__":
