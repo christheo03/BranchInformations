@@ -7,9 +7,10 @@
 import csv
 import logging
 import sys
-
+import re
 import angr
 import networkx as nx
+import pyvex
 
 NEW_COLS = [
     "br_is_loop_header",
@@ -30,8 +31,49 @@ NEW_COLS = [
     "branch_bb_addr",
     "taken_bb_addr",
     "fall_bb_addr",
+    "taken_ubd",
+    "fall_ubd",
+    "taken_store",
+    "fall_store",
 ]
 
+def has_store(proj, block_addr, block_size):
+
+    if block_addr is None:
+        return None
+    try:
+        irsb = proj.factory.block(block_addr, size=block_size).vex
+    except Exception:
+        return None
+
+    for stmt in irsb.statements:
+        if isinstance(stmt, pyvex.stmt.Store):
+            return True
+
+    return False
+
+def is_ubd(proj, block_addr, block_size, reg_offsets):
+
+    if not reg_offsets or block_addr is None:
+        return None
+    try:
+        irsb = proj.factory.block(block_addr, size=block_size).vex
+    except Exception:
+        return None
+
+    defined = set()
+    for stmt in irsb.statements:
+        # Read: WrTmp( Get(offset) )
+        if isinstance(stmt, pyvex.stmt.WrTmp):
+            if isinstance(stmt.data, pyvex.expr.Get):
+                offset = stmt.data.offset
+                if offset in reg_offsets and offset not in defined:
+                    return True    # used before defined
+        # Write: Put(offset, data)
+        if isinstance(stmt, pyvex.stmt.Put):
+            defined.add(stmt.offset)
+
+    return False
 
 def doms_from_idom(g, idom):
     dom = {n: set() for n in g.nodes()}
@@ -44,6 +86,23 @@ def doms_from_idom(g, idom):
             cur = idom[cur]
     return dom
 
+def parse_flag_registers(regs_read_str):
+
+    pattern = r'([a-zA-Z0-9_]+)\([^)]+\)'
+    names   = re.findall(pattern, str(regs_read_str))
+    return {n.lower() for n in names if n != "-1"}
+
+def names_to_offsets(proj, reg_names):
+    """
+    Converts register name strings to VEX IR offsets.
+    rax/eax/ax/al all map to the same offset automatically.
+    """
+    offsets = set()
+    for name in reg_names:
+        if name in proj.arch.registers:
+            offset, _ = proj.arch.registers[name]
+            offsets.add(offset)
+    return offsets
 
 def loop_body(g, head, tail):
     body = {head, tail}
@@ -122,7 +181,7 @@ def cell(v):
     return "-1" if v is None else ("1" if v else "0")
 
 
-def analyze_branch(proj, cfg, addr, cache):
+def analyze_branch(proj, cfg, addr, regs_read_str, cache):
     out = {c: "-1" for c in NEW_COLS}
     node = cfg.model.get_any_node(addr) or cfg.model.get_any_node(addr, anyaddr=True)
     if node is None or node.function_address is None:
@@ -170,7 +229,7 @@ def analyze_branch(proj, cfg, addr, cache):
         op = last_opcode(x)
         if op == "-1":
             return None
-        return op == "call"
+        return "CALL" in op
 
     out["br_is_loop_header"]  = cell(bb in A["loop_heads"])
     out["t_dominates"]        = cell(dominates(bb, taken))
@@ -190,6 +249,38 @@ def analyze_branch(proj, cfg, addr, cache):
     out["branch_bb_addr"]     = bb
     out["taken_bb_addr"]      = taken if taken is not None else "-1"
     out["fall_bb_addr"]       = fall  if fall  is not None else "-1"
+
+    # UBD analysis
+    flag_regs    = parse_flag_registers(regs_read_str)
+    flag_offsets = names_to_offsets(proj, flag_regs)
+
+    taken_node = cfg.model.get_any_node(taken) if taken is not None else None
+    fall_node  = cfg.model.get_any_node(fall)  if fall  is not None else None
+
+    if taken_node and flag_offsets:
+        result = is_ubd(proj, taken_node.addr, taken_node.size, flag_offsets)
+        out["taken_ubd"] = "1" if result is True else ("0" if result is False else "-1")
+    else:
+        out["taken_ubd"] = "-1"
+
+    if fall_node and flag_offsets:
+        result = is_ubd(proj, fall_node.addr, fall_node.size, flag_offsets)
+        out["fall_ubd"] = "1" if result is True else ("0" if result is False else "-1")
+    else:
+        out["fall_ubd"] = "-1"
+
+        # Store analysis
+    if taken_node:
+        result = has_store(proj, taken_node.addr, taken_node.size)
+        out["taken_store"] = "1" if result is True else ("0" if result is False else "-1")
+    else:
+        out["taken_store"] = "-1"
+
+    if fall_node:
+        result = has_store(proj, fall_node.addr, fall_node.size)
+        out["fall_store"] = "1" if result is True else ("0" if result is False else "-1")
+    else:
+        out["fall_store"] = "-1"
     return out
 
 
@@ -215,9 +306,13 @@ def main():
         w = csv.writer(fout)
         if len(rows) > 2:
             w.writerow(rows[2] + NEW_COLS)
+        header = rows[2]
+        regs_read_idx = header.index("Regs_Read")
+
         for row in rows[3:]:
             addr = int(row[0].strip(), 16)
-            extra = analyze_branch(proj, cfg, addr, cache)
+            regs_read_str = row[regs_read_idx] if regs_read_idx < len(row) else ""
+            extra = analyze_branch(proj, cfg, addr, regs_read_str, cache)
             w.writerow(row + [extra[c] for c in NEW_COLS])
 
     import os
