@@ -15,6 +15,7 @@ EMBED_DIM  = 24
 BATCH_SIZE = 512
 EPOCHS     = 150
 LR         = 0.001
+PATIENCE   = 15
 
 CLASS_HNT = 0
 CLASS_NB  = 1
@@ -33,14 +34,12 @@ TEST_FILES = [
 ]
 
 REG_COLS = ["reg1", "reg2", "reg3", "wreg1", "wreg2", "wreg3"]
-
 OPC_COLS = [
     "Opcode", "t_successor_ends", "f_successor_ends", "Flag_Instr_Opcode",
     "reg1_Op", "reg2_Op", "reg3_Op",
     "Prev_Op_1", "Prev_Op_2", "Prev_Op_3", "Prev_Op_4", "Prev_Op_5",
     "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5",
 ]
-
 ROUT_COL = "Routine_Type"
 ROUTINE_TYPE_MAP = {"NonLeaf": 1, "Leaf": 2, "Recursive": 3}
 
@@ -69,7 +68,6 @@ class NeuralNetworkWithEmbeddings(nn.Module):
                  embed_dim, num_features, n_classes,
                  hidden1=512, hidden2=256, dropout=0.4):
         super().__init__()
-
         self.n_reg = len(REG_COLS)
         self.n_opc = len(OPC_COLS)
 
@@ -155,7 +153,6 @@ def add_register_features(train_df, test_df):
 
     read_cols  = ['reg1', 'reg1_Op', 'reg2', 'reg2_Op', 'reg3', 'reg3_Op']
     write_cols = ['wreg1', 'wreg2', 'wreg3']
-
     for df in (train_df, test_df):
         df[read_cols]  = pd.DataFrame(df["Regs_Read"].apply(get_read_context).tolist(),
                                       index=df.index)
@@ -218,13 +215,9 @@ def build_features(train_df, test_df):
     y_train = torch.tensor(train_df["y"].values, dtype=torch.long)
     y_test  = torch.tensor(test_df["y"].values,  dtype=torch.long)
 
-    reg_vocab_size  = len(reg_vocab) + 1
-    opc_vocab_size  = len(opc_vocab) + 1
-    rout_vocab_size = 4
-
     return (X_train_num, X_train_cat, y_train,
             X_test_num,  X_test_cat,  y_test,
-            reg_vocab_size, opc_vocab_size, rout_vocab_size)
+            len(reg_vocab) + 1, len(opc_vocab) + 1, 4)
 
 
 def train_one_epoch(model, loader, criterion, optimizer, device):
@@ -257,7 +250,8 @@ def evaluate(model, loader, device):
 
 
 def main():
-    device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+    device = torch.accelerator.current_accelerator().type \
+             if torch.accelerator.is_available() else "cpu"
     set_seed(SEED)
     print(f"Using {device} device")
 
@@ -305,12 +299,13 @@ def main():
 
     class_counts  = torch.tensor([(y_train == c).sum().item() for c in range(N_CLASSES)],
                                   dtype=torch.float32)
-    print(f"\nclass counts:  {class_counts.tolist()}")
+    print(f"\nclass counts: {class_counts.tolist()}")
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=1e-4)
+
     best_f1, best_state, best_epoch = -1.0, None, -1
-    patience, patience_counter      = 15, 0
+    patience, patience_counter      = PATIENCE, 0
 
     print(f"\n=== Training ===\n")
     for epoch in range(1, EPOCHS + 1):
