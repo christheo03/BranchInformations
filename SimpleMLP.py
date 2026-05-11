@@ -11,8 +11,8 @@ from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from torch.utils.data import DataLoader, TensorDataset
 
 SEED       = 1
-EMBED_DIM  = 16
-BATCH_SIZE = 256
+EMBED_DIM  = 24
+BATCH_SIZE = 512
 EPOCHS     = 150
 LR         = 0.001
 
@@ -67,7 +67,7 @@ DROP_COLUMNS = [
 class NeuralNetworkWithEmbeddings(nn.Module):
     def __init__(self, reg_vocab_size, opc_vocab_size, rout_vocab_size,
                  embed_dim, num_features, n_classes,
-                 hidden1=512, hidden2=256, dropout=0.3):
+                 hidden1=512, hidden2=256, dropout=0.4):
         super().__init__()
 
         self.n_reg = len(REG_COLS)
@@ -309,7 +309,6 @@ def main():
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=1e-4)
-
     best_f1, best_state, best_epoch = -1.0, None, -1
     patience, patience_counter      = 15, 0
 
