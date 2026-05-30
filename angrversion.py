@@ -53,7 +53,6 @@ def has_store(proj, block_addr, block_size):
     return False
 
 def is_ubd(proj, block_addr, block_size, reg_offsets):
-
     if not reg_offsets or block_addr is None:
         return None
     try:
@@ -61,17 +60,22 @@ def is_ubd(proj, block_addr, block_size, reg_offsets):
     except Exception:
         return None
 
-    defined = set()
+
+    read_seen = set()
+    defined   = set()
+
     for stmt in irsb.statements:
-        # Read: WrTmp( Get(offset) )
         if isinstance(stmt, pyvex.stmt.WrTmp):
             if isinstance(stmt.data, pyvex.expr.Get):
                 offset = stmt.data.offset
                 if offset in reg_offsets and offset not in defined:
-                    return True    # used before defined
-        # Write: Put(offset, data)
+                    read_seen.add(offset)
+
         if isinstance(stmt, pyvex.stmt.Put):
-            defined.add(stmt.offset)
+            offset = stmt.offset
+            if offset in reg_offsets and offset in read_seen:
+                return True
+            defined.add(offset)
 
     return False
 
