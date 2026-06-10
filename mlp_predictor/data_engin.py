@@ -110,6 +110,7 @@ def encode_cols(df, cols, vocab):
 def build_features(train_df, test_df):
     add_register_features(train_df, test_df)
 
+    # Drop columns not needed 
     train_df.drop(
         columns=[c for c in DROP_COLUMNS if c in train_df.columns], inplace= True 
     )
@@ -118,6 +119,7 @@ def build_features(train_df, test_df):
         columns=[c for c in DROP_COLUMNS if c in test_df.columns], inplace = True
     )
 
+    # fill null 
     for col in CONT_COLS + BIN_COLS:
         train_df[col] = train_df[col].fillna(0)
         test_df[col] = test_df[col].fillna(0)
@@ -150,6 +152,8 @@ def build_features(train_df, test_df):
         prefix=ROUT_COL,
     ).astype(float).values
 
+
+    # Normilize numeric values
     NUMERIC_COLS = CONT_COLS + BIN_COLS
 
     scaler = StandardScaler()
@@ -168,10 +172,13 @@ def build_features(train_df, test_df):
         dtype=torch.float32,
     )
 
+
+    # Normilize Categorial columns
     for col in REG_COLS + OPC_COLS:
         train_df[col] = train_df[col].fillna("-1").astype(str)
         test_df[col] = test_df[col].fillna("-1").astype(str)
 
+    # Map regs to ID
     reg_vocab = build_shared_vocab(train_df, REG_COLS)
     opc_vocab = build_shared_vocab(train_df, OPC_COLS)
 
@@ -203,6 +210,4 @@ def build_features(train_df, test_df):
         y_test,
         len(reg_vocab) + 1,
         len(opc_vocab) + 1,
-        reg_vocab,
-        opc_vocab,
     )

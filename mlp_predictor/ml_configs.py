@@ -75,11 +75,10 @@ BIN_COLS = [
 ]
 
 DROP_COLUMNS = [
-    "Taken", "Executed", "Regs_Read", "Regs_Write",
+    "Regs_Read", "Regs_Write",
     "branch_bb_addr", "taken_bb_addr", "fall_bb_addr",
     "Address", "Flag_Write_PC","wreg3",
     "Size",
     "Prev_Size_1", "Prev_Size_2", "Prev_Size_3", "Prev_Size_4", "Prev_Size_5",
     "Next_Size_1", "Next_Size_2", "Next_Size_3", "Next_Size_4", "Next_Size_5",
-
 ]

@@ -60,7 +60,7 @@ class NeuralNetworkWithEmbeddings(nn.Module):
         return self.net(x)
 
 @torch.no_grad()
-def evaluate(model, loader, device):
+def evaluate(model, loader, device,test_df):
     model.eval()
 
     all_logits = []
@@ -80,15 +80,29 @@ def evaluate(model, loader, device):
 
     preds = logits.argmax(dim=1)
 
+    preds_np=preds.numpy()
+    executed = test_df["Executed"].values
+    taken = test_df["Taken"].values
+
+    total_ex_HT=executed[preds_np==2].sum()
+    total_ex_HNT=executed[preds_np==0].sum()
+    total_ex= total_ex_HNT+total_ex_HT # Total executions of branhces that their prediction was HT, HNT
+    
+    miss_HT= executed[preds_np==2].sum() - taken[preds_np==2].sum()
+    miss_HNT= taken[preds_np==0].sum()
+
+    total_miss= miss_HNT+miss_HT
+
+    miss_rate = total_miss/total_ex
     acc = (preds == labels).float().mean().item()
 
     macro_f1 = f1_score(
         labels.numpy(),
         preds.numpy(),
         average="macro",
-    )
+    )   
 
-    return acc, macro_f1, preds, labels
+    return acc, macro_f1, preds, labels,miss_rate
 
 def set_seed(seed):
     random.seed(seed)
@@ -98,3 +112,7 @@ def set_seed(seed):
 
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+def mis_rate(files):
+    pass

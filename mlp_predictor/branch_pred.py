@@ -38,6 +38,9 @@ def run_model(device):
     train_df = load_data(DATA_DIR, TRAIN_FILES)
     test_df = load_data(DATA_DIR, TEST_FILES)
 
+    # Total Executions of the test files
+    
+    
     # Add labeling (HT, HNT, NB)
     train_df["y"] = add_label(train_df)
     test_df["y"] = add_label(test_df)
@@ -46,7 +49,7 @@ def run_model(device):
     (
         X_train_num, X_train_cat, y_train,
         X_test_num, X_test_cat, y_test,
-        reg_vs, opc_vs, reg_vocab, opc_vocab
+        reg_vs, opc_vs
     ) = build_features(train_df, test_df)
 
 
@@ -95,7 +98,7 @@ def run_model(device):
     for epoch in range(1, EPOCHS + 1):
         train_one_epoch(model, train_loader, criterion, optimizer, device)
 
-        _, test_f1, _, _ = evaluate(model, test_loader, device)
+        _, test_f1, _, _,_ = evaluate(model, test_loader, device,test_df)
 
         if test_f1 > best_f1:
             best_f1 = test_f1
@@ -110,43 +113,11 @@ def run_model(device):
 
     model.load_state_dict(best_state)
 
+    acc, f1, preds, labels,miss_rate = evaluate(model, test_loader, device,test_df)
 
-    # 1. Choose two registers you want to look at
-    reg_a = "rdi"
-    reg_b = "rsi"
+    
 
-    # 2. Get their integer IDs from your training vocabulary
-    id_a = reg_vocab.get(reg_a, 0)
-    id_b = reg_vocab.get(reg_b, 0)
-
-    print(f"--- Final Embedding Values ---")
-    print(f"Register '{reg_a}' maps to ID: {id_a}")
-    print(f"Register '{reg_b}' maps to ID: {id_b}\n")
-
-    # 3. Pull the 24 weights directly out of the trained model
-    # We use .detach().cpu().numpy() to turn the PyTorch tensors into clean numbers
-    model.eval() 
-    with torch.no_grad():
-        weights_a = model.reg_emb.weight[id_a].detach().cpu().numpy()
-        weights_b = model.reg_emb.weight[id_b].detach().cpu().numpy()
-
-    # 4. Print the raw 24 numbers side by side
-    print(f"{'Index':<6} | {reg_a:<10} | {reg_b:<10}")
-    print("-" * 32)
-    for i in range(EMBED_DIM):
-        print(f"Dim {i+1:<2} | {weights_a[i]:>10.4f} | {weights_b[i]:>10.4f}")
-
-    # 5. Bonus: Calculate how close they are mathematically (Cosine Similarity)
-    # 1.0 means perfectly identical, 0.0 means completely unrelated
-    tensor_a = model.reg_emb.weight[id_a].unsqueeze(0)
-    tensor_b = model.reg_emb.weight[id_b].unsqueeze(0)
-    similarity = torch.nn.functional.cosine_similarity(tensor_a, tensor_b).item()
-
-    print("-" * 32)
-    print(f"Mathematical Similarity Score: {similarity:.4f}")
-    acc, f1, preds, labels = evaluate(model, test_loader, device)
-
-    return acc, f1, preds, labels, best_epoch
+    return acc, f1, preds, labels, best_epoch,miss_rate 
 
 def main():
     if hasattr(torch, 'accelerator') and torch.accelerator.is_available():
@@ -162,14 +133,13 @@ def main():
     print(f"Test files:  {TEST_FILES}")
     print(f"{'=' * 60}")
 
-    acc, f1, preds, labels, best_epoch = run_model(device)
-
-
+    acc, f1, preds, labels, best_epoch,miss_rate = run_model(device)
 
     print(
         f"\nBest epoch: {best_epoch}  "
         f"acc={acc:.3f}  "
         f"macro_f1={f1:.3f}"
+        f"miss_rate={miss_rate:.5f}"
     )
 
     print(
@@ -187,6 +157,7 @@ def main():
     results.append({
         "accuracy": acc,
         "macro_f1": f1,
+        "miss_rate": miss_rate,
         "n_test": len(labels),
         "best_epoch": best_epoch,
     })
@@ -195,23 +166,26 @@ def main():
     print("SUMMARY")
     print(f"{'=' * 60}")
 
-    print(f"{'Acc':>8} {'F1':>8} {'N':>8} {'Epoch':>8}")
+    print(f"{'Acc':>8} {'F1':>8} {'MissRate':>10} {'N':>8} {'Epoch':>8}")
     print("-" * 70)
 
     for r in results:
         print(
             f"{r['accuracy']:>8.3f} "
             f"{r['macro_f1']:>8.3f} "
+            f"{r['miss_rate']:>10.5f} "
             f"{r['n_test']:>8} "
             f"{r['best_epoch']:>8}"
         )
 
     accs = [r["accuracy"] for r in results]
     f1s = [r["macro_f1"] for r in results]
+    misses = [r["miss_rate"] for r in results]
 
     print("-" * 70)
-    print(f"{'Mean':<30} {np.mean(accs):>8.3f} {np.mean(f1s):>8.3f}")
-    print(f"{'Std':<30} {np.std(accs):>8.3f} {np.std(f1s):>8.3f}")
+    print("-" * 80)
+    print(f"{'Mean':<30} {np.mean(accs):>8.3f} {np.mean(f1s):>8.3f} {np.mean(misses):>10.5f}")
+    print(f"{'Std':<30} {np.std(accs):>8.3f} {np.std(f1s):>8.3f} {np.std(misses):>10.5f}")
 
 
 if __name__ == "__main__":
