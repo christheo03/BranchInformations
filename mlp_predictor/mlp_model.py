@@ -38,25 +38,23 @@ class NeuralNetworkWithEmbeddings(nn.Module):
         )
 
     def forward(self, x_num, x_cat):
+        # 1. Separate your categorical columns
         x_reg = x_cat[:, :self.n_reg]
         x_opc = x_cat[:, self.n_reg:self.n_reg + self.n_opc]
-        reg_embeds = [
-            self.reg_emb(x_reg[:, i])
-            for i in range(self.n_reg)
-        ]
-
-        opc_embeds = [
-            self.opc_emb(x_opc[:, i])
-            for i in range(self.n_opc)
-        ]
-
-        x_cat_embedded = torch.cat(
-            reg_embeds + opc_embeds,
-            dim=1
-        )
-
-        x = torch.cat([x_num, x_cat_embedded], dim=1)
-
+        
+        # 2. Vectorized embedding lookup (No python loops!)
+        # Shape results in: (batch_size, n_reg, embed_dim)
+        reg_embeds = self.reg_emb(x_reg) 
+        opc_embeds = self.opc_emb(x_opc)
+        
+        # 3. Flatten the embeddings for the linear layer
+        # Flatten to: (batch_size, n_reg * embed_dim)
+        reg_flat = reg_embeds.view(reg_embeds.size(0), -1)
+        opc_flat = opc_embeds.view(opc_embeds.size(0), -1)
+        
+        # 4. Concatenate everything together
+        x = torch.cat([x_num, reg_flat, opc_flat], dim=1)
+        
         return self.net(x)
 
 @torch.no_grad()
@@ -113,6 +111,3 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-
-def mis_rate(files):
-    pass

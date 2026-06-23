@@ -97,7 +97,6 @@ def run_model(device):
     # Train
     for epoch in range(1, EPOCHS + 1):
         train_one_epoch(model, train_loader, criterion, optimizer, device)
-
         _, test_f1, _, _,_ = evaluate(model, test_loader, device,test_df)
 
         if test_f1 > best_f1:
@@ -114,8 +113,6 @@ def run_model(device):
     model.load_state_dict(best_state)
 
     acc, f1, preds, labels,miss_rate = evaluate(model, test_loader, device,test_df)
-
-    
 
     return acc, f1, preds, labels, best_epoch,miss_rate 
 

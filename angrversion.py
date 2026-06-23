@@ -320,7 +320,7 @@ def main():
             w.writerow(row + [extra[c] for c in NEW_COLS])
 
     import os
-    os.replace(tmp_path, "branches.csv")  # atomic swap
+    os.replace(tmp_path, "branches.csv") 
     print("updated branches.csv")
 
 
