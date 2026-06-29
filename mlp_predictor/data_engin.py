@@ -4,6 +4,7 @@ from ml_configs import (CLASS_HNT,CLASS_NB,CLASS_HT,
                         ROUTINE_TYPE_MAP)
 from ml_configs import StandardScaler
 
+# Load raw data from csv files  
 def load_data(data_dir, names):
     dfs = []
 
@@ -18,6 +19,7 @@ def load_data(data_dir, names):
     return pd.concat(dfs, ignore_index=True)
 
 
+# Add label on each row  (HT,HNT,NB) baised on threshold
 def add_label(df, thr=0.005):
     rate = df["Taken"] / df["Executed"]
 
@@ -27,7 +29,7 @@ def add_label(df, thr=0.005):
 
     return label.astype(int)
 
-
+# Register column that stores all the values is seperated to features
 def add_register_features(train_df, test_df):
     def get_read_context(text):
         if pd.isna(text) or str(text).strip() == "":
@@ -107,6 +109,7 @@ def encode_cols(df, cols, vocab):
         axis=1,
     )
 
+# Normalizations
 def build_features(train_df, test_df):
     add_register_features(train_df, test_df)
 
@@ -156,12 +159,20 @@ def build_features(train_df, test_df):
     # Normilize numeric values
     NUMERIC_COLS = CONT_COLS + BIN_COLS
 
+    print("\nBefore normalization:")
+    print(train_df[NUMERIC_COLS].head(2))
+
     scaler = StandardScaler()
     scaler.fit(train_df[NUMERIC_COLS])
 
     X_train_scaled = scaler.transform(train_df[NUMERIC_COLS])
     X_test_scaled = scaler.transform(test_df[NUMERIC_COLS])
 
+    print("\nAfter normalization:")
+    print(pd.DataFrame(
+        X_train_scaled[:2],
+        columns=NUMERIC_COLS
+    ))
     X_train_num = torch.tensor(
         np.hstack([X_train_scaled, X_train_rout]),
         dtype=torch.float32,
@@ -172,7 +183,8 @@ def build_features(train_df, test_df):
         dtype=torch.float32,
     )
 
-
+    print("\nBefore encoding:")
+    print(train_df[REG_COLS + OPC_COLS].head(2))
     # Normilize Categorial columns
     for col in REG_COLS + OPC_COLS:
         train_df[col] = train_df[col].fillna("-1").astype(str)
@@ -189,6 +201,10 @@ def build_features(train_df, test_df):
         ]),
         dtype=torch.long,
     )
+
+
+    print("\nAfter encoding:")
+    print(X_train_cat[:2])
 
     X_test_cat = torch.tensor(
         np.hstack([
