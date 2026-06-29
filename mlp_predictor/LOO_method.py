@@ -10,7 +10,7 @@ from ml_configs import (
 )
 from data_engin import *
 from mlp_model import *
-from branch_pred import train_one_epoch
+from hb_branch_pred import train_one_epoch
 
 
 def loo_method(device, train_files, test_file):
