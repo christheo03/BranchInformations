@@ -11,7 +11,7 @@ EMBED_DIM = 16
 N_CLASSES = 1
 EPOCHS = 500
 
-LR = 0.05
+LR = 0.001
 LR_INC=1.05
 LR_DEC=0.5
 
@@ -84,48 +84,42 @@ def get_binary_error(outputs, weights, rates):
     errors = ((1.0 - y_k_binary) * rates * weights) + (y_k_binary * (1.0 - rates) * weights)
     return torch.sum(errors).item()
 
-def train(model,train_loader,test_loader,loss_func,optim,device,patience=10):
+def train(model, train_loader, test_loader, loss_func, optim, device, patience=10):
     prev_loss = float('inf')
-    best_train_err = float('inf')
-
+    best_test_err = float('inf')  # <--- Track the best test threshold error
     patience_counter = 0
     best_model_state = None
     saved_epoch_test_err = 0.0
-
     for epoch in range(EPOCHS):
-        # 1. TRAINING SWEEP (Gradient Accumulation)
+        # 1. TRAINING SWEEP (Gradient Accumulation - Continuous Loss Function)
         model.train()
         optim.zero_grad()
         epoch_loss, epoch_train_err, total_train_w = 0.0, 0.0, 0.0
-
         for x_num, x_cat, y_target, weights, rates in train_loader:
             x_num, x_cat = x_num.to(device), x_cat.to(device)
             weights, rates = weights.to(device), rates.to(device)
             y_target = y_target.to(device).float()
-
             outputs = model(x_num, x_cat)
-            loss = loss_func(outputs, y_target, weights, rates)
+            
+            # --- Continuous Loss is used to train the network ---
+            loss = loss_func(outputs, y_target, weights, rates) 
             
             # Scale batch loss to simulate a true full-corpus update
             batch_scale = torch.sum(weights) / len(train_loader.dataset)
             (loss * batch_scale).backward()
-
             epoch_loss += loss.item() * torch.sum(weights).item()
             epoch_train_err += get_binary_error(outputs, weights, rates)
             total_train_w += torch.sum(weights).item()
-
         optim.step()  # Weights update ONCE per epoch sweep
         epoch_loss /= total_train_w
         epoch_train_err /= total_train_w
-
         # # 2. ADAPTIVE LEARNING RATE STEP
         # current_lr = optim.param_groups[0]['lr']
         # new_lr = current_lr * LR_INC if epoch_loss < prev_loss else current_lr * LR_DEC
         # for param_group in optim.param_groups:
         #     param_group['lr'] = new_lr
         # prev_loss = epoch_loss
-
-        # 3. EVALUATION SWEEP (Test Miss Rate)
+        # 3. EVALUATION SWEEP (Test Miss Rate / Threshold Error)
         model.eval()
         epoch_test_err, total_test_w = 0.0, 0.0
         with torch.no_grad():
@@ -137,13 +131,11 @@ def train(model,train_loader,test_loader,loss_func,optim,device,patience=10):
                 epoch_test_err += get_binary_error(outputs, weights, rates)
                 total_test_w += torch.sum(weights).item()
         epoch_test_err /= total_test_w
-
         print(f"Epoch {epoch+1:03d} | Loss: {epoch_loss:.5f} | Train Miss %: {epoch_train_err * 100:.3f}% | Test Miss %: {epoch_test_err * 100:.3f}%")
-
-        # 4. PATIENCE-BASED EARLY STOPPING
-        if epoch_train_err < best_train_err:
-            best_train_err = epoch_train_err
-            patience_counter = 0  # Reset counter since we improved
+        # 4. PATIENCE-BASED EARLY STOPPING (Monitored on Test Threshold Error)
+        if epoch_test_err < best_test_err:
+            best_test_err = epoch_test_err
+            patience_counter = 0  # Reset counter since test error improved
             
             # Deepcopy weights so we can roll back to them later
             best_model_state = copy.deepcopy(model.state_dict())
@@ -151,17 +143,12 @@ def train(model,train_loader,test_loader,loss_func,optim,device,patience=10):
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"\n[EARLY STOPPING] No improvement in train miss rate for {patience} epochs. Stopping.")
+                print(f"\n[EARLY STOPPING] No improvement in test miss rate for {patience} epochs. Stopping.")
                 break
-
     # Restore the model to its absolute best state before returning
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
-
     return saved_epoch_test_err
-
-
-
 
 def main():
     if hasattr(torch, 'accelerator') and torch.accelerator.is_available():
@@ -185,7 +172,7 @@ def main():
         model, train_loader, test_loader = prepare_datasets(device, train_files, [test_file])
         
         loss_function = DynamicMissPredictionLoss()
-        optimizer = optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
         # Train and track metrics
         miss_rate = train(model, train_loader, test_loader, loss_function, optimizer, device)
