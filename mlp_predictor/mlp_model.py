@@ -165,4 +165,4 @@ class MLP_TNT_emb(nn.Module):
         # 4. Concatenate everything together
         x = torch.cat([x_num, reg_flat, opc_flat], dim=1)
         
-        return torch.tanh(self.net(x))+0.5 
+        return 0.5*torch.tanh(self.net(x))+0.5 
