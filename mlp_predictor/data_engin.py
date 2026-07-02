@@ -159,8 +159,7 @@ def build_features(train_df, test_df):
     # Normilize numeric values
     NUMERIC_COLS = CONT_COLS + BIN_COLS
 
-    print("\nBefore normalization:")
-    print(train_df[NUMERIC_COLS].head(2))
+
 
     scaler = StandardScaler()
     scaler.fit(train_df[NUMERIC_COLS])
@@ -168,11 +167,7 @@ def build_features(train_df, test_df):
     X_train_scaled = scaler.transform(train_df[NUMERIC_COLS])
     X_test_scaled = scaler.transform(test_df[NUMERIC_COLS])
 
-    print("\nAfter normalization:")
-    print(pd.DataFrame(
-        X_train_scaled[:2],
-        columns=NUMERIC_COLS
-    ))
+
     X_train_num = torch.tensor(
         np.hstack([X_train_scaled, X_train_rout]),
         dtype=torch.float32,
@@ -183,8 +178,7 @@ def build_features(train_df, test_df):
         dtype=torch.float32,
     )
 
-    print("\nBefore encoding:")
-    print(train_df[REG_COLS + OPC_COLS].head(2))
+
     # Normilize Categorial columns
     for col in REG_COLS + OPC_COLS:
         train_df[col] = train_df[col].fillna("-1").astype(str)
@@ -203,8 +197,7 @@ def build_features(train_df, test_df):
     )
 
 
-    print("\nAfter encoding:")
-    print(X_train_cat[:2])
+
 
     X_test_cat = torch.tensor(
         np.hstack([
