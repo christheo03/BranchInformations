@@ -185,8 +185,9 @@ def build_features(train_df, test_df):
         test_df[col] = test_df[col].fillna("-1").astype(str)
 
     # Map regs to ID
-    reg_vocab = build_shared_vocab(train_df, REG_COLS)
-    opc_vocab = build_shared_vocab(train_df, OPC_COLS)
+    combined_df = pd.concat([train_df, test_df], ignore_index=True)
+    reg_vocab = build_shared_vocab(combined_df, REG_COLS)
+    opc_vocab = build_shared_vocab(combined_df, OPC_COLS)
 
     X_train_cat = torch.tensor(
         np.hstack([
