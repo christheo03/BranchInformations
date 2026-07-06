@@ -158,7 +158,7 @@ def objective(trial):
     # Suggest parameters for this trial
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
     dropout = trial.suggest_float("dropout", 0.1, 0.5)
-    embed_dim = trial.suggest_categorical("embed_dim", [8, 16, 24, 32, 64])
+    embed_dim = trial.suggest_categorical("embed_dim", [4, 8, 16])
     hidden1 = trial.suggest_int("hidden1", 128, 512, step=64)
     hidden2 = trial.suggest_int("hidden2", 64, 256, step=32)
     batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024])
