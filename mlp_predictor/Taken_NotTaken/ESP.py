@@ -1,6 +1,6 @@
 from mlp_model import set_seed, MLP_ESP
-from data_engin import load_data, add_register_features
-from ml_configs import SEED, TEST_FILES, TRAIN_FILES, DROP_COLUMNS, CONT_COLS, BIN_COLS, REG_COLS,OPC_COLS
+from data_engin import load_data, add_register_features,pd
+from ml_configs import SEED, TEST_FILES, TRAIN_FILES, DROP_COLUMNS, CONT_COLS, BIN_COLS, ROUT_COL,ROUTINE_TYPE_MAP
 from ml_configs import DataLoader, TensorDataset, torch,StandardScaler
 from .criterion import DynamicMissPredictionLoss
 import copy
@@ -19,7 +19,6 @@ def add_label(df):
 
 
 # Prepare the model (Normalization, Model Architecture)
-# RETURN VALUE CHANGED: Now returns reg_vs, opc_vs, and num_features to save them at the end.
 def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout, batch_size):
     set_seed(SEED)
 
@@ -56,10 +55,24 @@ def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout,
     for col in CONT_COLS + BIN_COLS:
         train_df[col] = train_df[col].fillna(0)
         test_df[col] = test_df[col].fillna(0)
+    
+    train_df[ROUT_COL] = train_df[ROUT_COL].map(ROUTINE_TYPE_MAP).fillna(0)
+    test_df[ROUT_COL] = test_df[ROUT_COL].map(ROUTINE_TYPE_MAP).fillna(0)
 
+    string_cols = train_df.select_dtypes(include=['object']).columns.tolist()
+    if ROUT_COL in string_cols:
+        string_cols.remove(ROUT_COL)
+
+    for col in string_cols:
+        unique_vals = pd.concat([train_df[col], test_df[col]]).dropna().unique()
+        mapping = {val: idx for idx, val in enumerate(unique_vals)}
+        train_df[col] = train_df[col].map(mapping).fillna(0)
+        test_df[col] = test_df[col].map(mapping).fillna(0)
+
+    
     X_train_scaled = scaler.fit_transform(train_df)
-
     X_test_scaled = scaler.transform(test_df)
+
     X_train = torch.tensor(X_train_scaled, dtype=torch.float32)
     X_test = torch.tensor(X_test_scaled, dtype=torch.float32)
 
@@ -180,8 +193,7 @@ def objective(trial):
     hidden2 = trial.suggest_int("hidden2", 64, 256, step=32)
     batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024])
     
-    # Load dynamic datasets and instantiate the model
-    # Unpack the 6 returned values correctly
+
     model, train_loader, test_loader, num_features = prepare_datasets(
         device, TRAIN_FILES, TEST_FILES, 
         hidden1=hidden1, hidden2=hidden2, dropout=dropout,
