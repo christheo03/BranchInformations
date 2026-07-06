@@ -120,9 +120,9 @@ class MLP_TNT_emb(nn.Module):
         embed_dim,
         num_features,
         n_classes,
-        hidden1=256,
-        hidden2=128,
-        dropout=0.4,
+        hidden1,
+        hidden2,
+        dropout,
     ):
         super().__init__()
 
@@ -146,23 +146,54 @@ class MLP_TNT_emb(nn.Module):
 
             nn.Linear(hidden2, n_classes),
         )
-
+        
     def forward(self, x_num, x_cat):
         # 1. Separate your categorical columns
         x_reg = x_cat[:, :self.n_reg]
         x_opc = x_cat[:, self.n_reg:self.n_reg + self.n_opc]
-        
+
         # 2. Vectorized embedding lookup (No python loops!)
         # Shape results in: (batch_size, n_reg, embed_dim)
         reg_embeds = self.reg_emb(x_reg) 
         opc_embeds = self.opc_emb(x_opc)
-        
+
         # 3. Flatten the embeddings for the linear layer
         # Flatten to: (batch_size, n_reg * embed_dim)
         reg_flat = reg_embeds.view(reg_embeds.size(0), -1)
         opc_flat = opc_embeds.view(opc_embeds.size(0), -1)
-        
+
         # 4. Concatenate everything together
         x = torch.cat([x_num, reg_flat, opc_flat], dim=1)
         
         return 0.5*torch.tanh(self.net(x))+0.5 
+    
+
+
+
+class MLP_ESP(nn.Module):
+    def __init__(
+            self,
+            num_features,
+            n_classes,
+            hidden1,
+            hidden2,
+            dropout,
+    ):
+        super().__init__()
+        
+        self.net = nn.Sequential(
+            nn.Linear(num_features, hidden1),
+            nn.BatchNorm1d(hidden1),
+            nn.Tanh(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden1, hidden2),
+            nn.BatchNorm1d(hidden2),
+            nn.Tanh(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden2, n_classes),
+        )
+
+    def forward(self, x):
+        # Passes the flat, standard-scaled input directly to the network
+        return 0.5 * torch.tanh(self.net(x)) + 0.5
+   
