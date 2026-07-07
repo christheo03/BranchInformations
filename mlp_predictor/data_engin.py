@@ -111,6 +111,7 @@ def encode_cols(df, cols, vocab):
 
 # Normalizations
 def build_features(train_df, test_df):
+    # Add features about registes read and reagister defined opcodes
     add_register_features(train_df, test_df)
 
     # Drop columns not needed 
@@ -158,8 +159,6 @@ def build_features(train_df, test_df):
 
     # Normilize numeric values
     NUMERIC_COLS = CONT_COLS + BIN_COLS
-
-
 
     scaler = StandardScaler()
     scaler.fit(train_df[NUMERIC_COLS])

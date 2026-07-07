@@ -54,6 +54,7 @@ OPC_COLS = [
 ]
 
 ROUT_COL = "Routine_Type"
+LANG_COL = "Language"
 
 ROUTINE_TYPE_MAP = {
     "NonLeaf": 1,
@@ -81,4 +82,12 @@ DROP_COLUMNS = [
     "Size",
     "Prev_Size_1", "Prev_Size_2", "Prev_Size_3", "Prev_Size_4", "Prev_Size_5",
     "Next_Size_1", "Next_Size_2", "Next_Size_3", "Next_Size_4", "Next_Size_5",
+]
+
+
+ESP_EXTRA_DROP = [
+    "Same_BBL", "taken_store", "fall_store",
+    "Prev_Op_1", "Prev_Op_2", "Prev_Op_3", "Prev_Op_4", "Prev_Op_5",
+    "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5",
+    "reg1", "reg2", "reg3", "wreg1", "wreg2",
 ]
