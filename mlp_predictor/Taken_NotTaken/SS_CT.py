@@ -1,4 +1,4 @@
-from mlp_model import set_seed, MLP_ESP
+from mlp_model import set_seed, MLP_SS
 from data_engin import load_data, add_register_features,pd
 from ml_configs import SEED, TEST_FILES, TRAIN_FILES, DROP_COLUMNS, CONT_COLS, BIN_COLS, ROUT_COL,ROUTINE_TYPE_MAP, LANG_COL
 from ml_configs import DataLoader, TensorDataset, torch,StandardScaler
@@ -104,7 +104,7 @@ def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout,
 
     num_features = X_train.shape[1]
 
-    model = MLP_ESP(
+    model = MLP_SS(
         num_features=num_features,
         n_classes=N_CLASSES,
         hidden1=hidden1,
