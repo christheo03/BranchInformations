@@ -236,8 +236,8 @@ def main():
         "num_features": num_features
     }
     
-    torch.save(checkpoint, "best_model1.pth")
-    print("Successfully saved best model and all parameters to 'best_model.pth'!")
+    torch.save(checkpoint, "EMB_CT.pth")
+    print("Successfully saved best model and all parameters to 'EMB_CT.pth'!")
 
     
 if  __name__ == "__main__":
