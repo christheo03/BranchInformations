@@ -180,6 +180,7 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
 
+
         if epoch_test_err < best_test_err:
             best_test_err = epoch_test_err
             patience_counter = 0
