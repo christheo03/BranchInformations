@@ -25,12 +25,10 @@ class NeuralNetworkWithEmbeddings(nn.Module):
 
         self.net = nn.Sequential(
             nn.Linear(in_features, hidden1),
-            nn.BatchNorm1d(hidden1),
             nn.ReLU(),
             nn.Dropout(dropout),
 
             nn.Linear(hidden1, hidden2),
-            nn.BatchNorm1d(hidden2),
             nn.ReLU(),
             nn.Dropout(dropout),
 
@@ -135,12 +133,10 @@ class MLP_TNT_emb(nn.Module):
 
         self.net = nn.Sequential(
             nn.Linear(in_features, hidden1),
-            nn.BatchNorm1d(hidden1),
             nn.Tanh(),
             nn.Dropout(dropout),
 
             nn.Linear(hidden1, hidden2),
-            nn.BatchNorm1d(hidden2),
             nn.Tanh(),
             nn.Dropout(dropout),
 
@@ -208,11 +204,9 @@ class MLP_SS(nn.Module):
         
         self.net = nn.Sequential(
             nn.Linear(num_features, hidden1),
-            nn.BatchNorm1d(hidden1),
             nn.Tanh(),
             nn.Dropout(dropout),
             nn.Linear(hidden1, hidden2),
-            nn.BatchNorm1d(hidden2),
             nn.Tanh(),
             nn.Dropout(dropout),
             nn.Linear(hidden2, n_classes),
