@@ -1,34 +1,26 @@
-from mlp_model import set_seed, MLP_SS
-from data_engin import load_data, add_register_features,pd
-from ml_configs import SEED, TEST_FILES, TRAIN_FILES, DROP_COLUMNS, CONT_COLS, BIN_COLS, ROUT_COL,ROUTINE_TYPE_MAP, LANG_COL
-from ml_configs import DataLoader, TensorDataset, torch,StandardScaler
+from mlp_model import MLP_SS
+from data_engin import load_data, add_register_features, std_scaler_norm, add_label_tnt, get_binary_error
+from ml_configs import TEST_FILES, TRAIN_FILES, CT_COLUMNS
+from ml_configs import DataLoader, TensorDataset, torch
 from .criterion import DynamicMissPredictionLoss
 import copy
 import optuna
 
 DATA_DIR = "../../results"
 N_CLASSES = 1
-EPOCHS = 500
-
-
-# Add taken, not taken label
-def add_label(df):
-    rate = df["Taken"] / df["Executed"]
-    label = (rate > 0.5).astype(int)
-    return label
-
+EPOCHS = 200
 
 # Prepare the model (Normalization, Model Architecture)
 def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout, batch_size):
-    set_seed(SEED)
+
 
     # Load raw data from csv files
     train_df = load_data(DATA_DIR, train_files)
     test_df = load_data(DATA_DIR, test_files)
 
     # Add labels
-    train_df["y"] = add_label(train_df)
-    test_df["y"] = add_label(test_df)
+    train_df["y"] = add_label_tnt(train_df)
+    test_df["y"] = add_label_tnt(test_df)
 
     train_weights = torch.tensor(train_df["weight"].values, dtype=torch.float32)
     train_rates = torch.tensor(train_df["rate"].values, dtype=torch.float32)
@@ -38,55 +30,18 @@ def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout,
     test_rates = torch.tensor(test_df["rate"].values, dtype=torch.float32)
     y_test = torch.tensor(test_df["y"].values, dtype=torch.float32)
 
-    # weight/rate/y are already captured as tensors above, and Taken/Executed
-    # are what y is derived from - none of these may leak into the feature frame.
-    # Language is dropped here too, to keep SS_CT's feature set identical to EMB_CT's.
-    LEAK_COLS = ["weight", "rate", "y", "Taken", "Executed", LANG_COL]
-    train_df.drop(columns=[c for c in LEAK_COLS if c in train_df.columns], inplace=True)
-    test_df.drop(columns=[c for c in LEAK_COLS if c in test_df.columns], inplace=True)
-
     add_register_features(train_df, test_df)
 
-    scaler = StandardScaler()
-
-        # Drop columns not needed
-    train_df.drop(
-        columns=[c for c in DROP_COLUMNS if c in train_df.columns], inplace= True
+    X_train, X_test, scaler, reg_vocab, opc_vocab, feature_columns = std_scaler_norm(
+        train_df, test_df, CT_COLUMNS
     )
 
-    test_df.drop(
-        columns=[c for c in DROP_COLUMNS if c in test_df.columns], inplace = True
-    )
-
-    # fill null 
-    for col in CONT_COLS + BIN_COLS:
-        train_df[col] = train_df[col].fillna(0)
-        test_df[col] = test_df[col].fillna(0)
-    
-    train_df[ROUT_COL] = train_df[ROUT_COL].map(ROUTINE_TYPE_MAP).fillna(0)
-    test_df[ROUT_COL] = test_df[ROUT_COL].map(ROUTINE_TYPE_MAP).fillna(0)
-
-    string_cols = train_df.select_dtypes(include=['object']).columns.tolist()
-    if ROUT_COL in string_cols:
-        string_cols.remove(ROUT_COL)
-
-    for col in string_cols:
-        unique_vals = pd.concat([train_df[col], test_df[col]]).dropna().unique()
-        mapping = {val: idx for idx, val in enumerate(unique_vals)}
-        train_df[col] = train_df[col].map(mapping).fillna(0)
-        test_df[col] = test_df[col].map(mapping).fillna(0)
-
-    print(f"[SS_CT] Features used ({len(train_df.columns)}): {list(train_df.columns)}")
-
-    X_train_scaled = scaler.fit_transform(train_df)
-    X_test_scaled = scaler.transform(test_df)
-
-    X_train = torch.tensor(X_train_scaled, dtype=torch.float32)
-    X_test = torch.tensor(X_test_scaled, dtype=torch.float32)
+    print(f"[SS_CT] Features used ({len(feature_columns)}): {feature_columns}")
+    print(f"X_train shape: {X_train.shape}")
 
     # Initialize DataLoaders
     g = torch.Generator()
-    g.manual_seed(SEED)
+
 
     train_loader = DataLoader(
         TensorDataset(X_train, y_train, train_weights, train_rates),
@@ -112,15 +67,8 @@ def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout,
         dropout=dropout,
     ).to(device)
 
+    return model, train_loader, test_loader, num_features, scaler, reg_vocab, opc_vocab, feature_columns
 
-    
-    return model, train_loader, test_loader, num_features
-
-def get_binary_error(outputs, weights, rates):
-    y_k = outputs.squeeze(-1) if outputs.dim() > 1 else outputs
-    y_k_binary = (y_k > 0.5).float()
-    errors = ((1.0 - y_k_binary) * rates * weights) + (y_k_binary * (1.0 - rates) * weights)
-    return torch.sum(errors).item()
 
 
 def train(model, train_loader, test_loader, loss_func, optim, device, patience=25, trial=None):
@@ -202,8 +150,8 @@ def objective(trial):
     batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024])
     
 
-    model, train_loader, test_loader, num_features = prepare_datasets(
-        device, TRAIN_FILES, TEST_FILES, 
+    model, train_loader, test_loader, num_features, scaler, reg_vocab, opc_vocab, feature_columns = prepare_datasets(
+        device, TRAIN_FILES, TEST_FILES,
         hidden1=hidden1, hidden2=hidden2, dropout=dropout,
         batch_size=batch_size
     )
@@ -229,7 +177,7 @@ def main():
     study = optuna.create_study(direction="minimize")
     
     # Run search for 20 trials (training runs)
-    study.optimize(objective, n_trials=20)
+    study.optimize(objective, n_trials=100)
     
     best_params = study.best_params
 
@@ -243,27 +191,34 @@ def main():
 
     # Train the final model using the best hyperparameters found
     print("Training final model using best hyperparameters...")
-    model, train_loader, test_loader, num_features = prepare_datasets(
-        device, TRAIN_FILES, TEST_FILES, 
+    model, train_loader, test_loader, num_features, scaler, reg_vocab, opc_vocab, feature_columns = prepare_datasets(
+        device, TRAIN_FILES, TEST_FILES,
         hidden1=best_params["hidden1"],
         hidden2=best_params["hidden2"],
         dropout=best_params["dropout"],
         batch_size=best_params["batch_size"]
     )
-    
+
     loss_function = DynamicMissPredictionLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=best_params["lr"])
-    
+
     # Train one final time to converge on the optimal weights
     train(model, train_loader, test_loader, loss_function, optimizer, device)
 
-    # Save the model state dictionary and all config parameters to rebuild it later
+    # Save the model weights together with everything needed to preprocess
+    # raw test CSVs the same way at inference time (scaler + vocabs), so the
+    # checkpoint is self-sufficient and doesn't require re-fitting on
+    # TRAIN_FILES to evaluate later.
     checkpoint = {
         "model_state_dict": model.state_dict(),
         "hyperparameters": best_params,
-        "num_features": num_features
+        "num_features": num_features,
+        "scaler": scaler,
+        "reg_vocab": reg_vocab,
+        "opc_vocab": opc_vocab,
+        "feature_columns": feature_columns,
     }
-    
+
     torch.save(checkpoint, "SS_CT.pth")
     print("Successfully saved best model and all parameters to 'SS_CT.pth'!")
 

@@ -1,6 +1,6 @@
-from mlp_model import set_seed, MLP_TNT_emb
-from data_engin import load_data, build_features
-from ml_configs import SEED, TEST_FILES, TRAIN_FILES
+from mlp_model import MLP_TNT_emb
+from data_engin import load_data, build_features, add_label_tnt, get_binary_error
+from ml_configs import TEST_FILES, TRAIN_FILES
 from ml_configs import CONT_COLS, BIN_COLS, ROUT_COL, REG_COLS, OPC_COLS
 from ml_configs import DataLoader, TensorDataset, torch
 from .criterion import DynamicMissPredictionLoss
@@ -9,28 +9,21 @@ import optuna
 
 DATA_DIR = "../../results"
 N_CLASSES = 1
-EPOCHS = 500
-
-
-# Add taken, not taken label
-def add_label(df):
-    rate = df["Taken"] / df["Executed"]
-    label = (rate > 0.5).astype(int)
-    return label
+EPOCHS = 200
 
 
 # Prepare the model (Normalization, Model Architecture)
 # RETURN VALUE CHANGED: Now returns reg_vs, opc_vs, and num_features to save them at the end.
 def prepare_datasets(device, train_files, test_files, embed_dim, hidden1, hidden2, dropout, batch_size):
-    set_seed(SEED)
+    
 
     # Load raw data from csv files
     train_df = load_data(DATA_DIR, train_files)
     test_df = load_data(DATA_DIR, test_files)
 
     # Add labels
-    train_df["y"] = add_label(train_df)
-    test_df["y"] = add_label(test_df)
+    train_df["y"] = add_label_tnt(train_df)
+    test_df["y"] = add_label_tnt(test_df)
 
     train_weights = torch.tensor(train_df["weight"].values, dtype=torch.float32)
     train_rates = torch.tensor(train_df["rate"].values, dtype=torch.float32)
@@ -42,16 +35,20 @@ def prepare_datasets(device, train_files, test_files, embed_dim, hidden1, hidden
     (
         X_train_num, X_train_cat, y_train,
         X_test_num, X_test_cat, y_test,
-        reg_vs, opc_vs
-    ) = build_features(train_df, test_df)
+        reg_vs, opc_vs,
+        scaler, reg_vocab, opc_vocab, numeric_cols,
+    ) = build_features(train_df, test_df, return_artifacts=True)
 
-    numeric_features = CONT_COLS + BIN_COLS + [f"{ROUT_COL}_{i}" for i in range(4)]
+    numeric_features = CONT_COLS + BIN_COLS + [f"{ROUT_COL}_{i}" for i in (1, 2, 3)]
     categorical_features = REG_COLS + OPC_COLS
     print(f"[EMB_CT] Scaled numeric features ({len(numeric_features)}): {numeric_features}")
     print(f"[EMB_CT] Embedded categorical features ({len(categorical_features)}): {categorical_features}")
 
+    print(f"[EMB_CT] Categorial data: {X_train_cat.shape}")
+    print(f"[EMB_CT] Numerical data: {X_train_num.shape}")
+
     g = torch.Generator()
-    g.manual_seed(SEED)
+    
 
     train_loader = DataLoader(
         TensorDataset(X_train_num, X_train_cat, y_train, train_weights, train_rates),
@@ -79,14 +76,10 @@ def prepare_datasets(device, train_files, test_files, embed_dim, hidden1, hidden
         dropout=dropout,
     ).to(device)
 
-    return model, train_loader, test_loader, reg_vs, opc_vs, num_features
-    
-
-def get_binary_error(outputs, weights, rates):
-    y_k = outputs.squeeze(-1) if outputs.dim() > 1 else outputs
-    y_k_binary = (y_k > 0.5).float()
-    errors = ((1.0 - y_k_binary) * rates * weights) + (y_k_binary * (1.0 - rates) * weights)
-    return torch.sum(errors).item()
+    return (
+        model, train_loader, test_loader, reg_vs, opc_vs, num_features,
+        scaler, reg_vocab, opc_vocab, numeric_cols,
+    )
 
 
 def train(model, train_loader, test_loader, loss_func, optim, device, patience=25, trial=None):
@@ -164,15 +157,14 @@ def objective(trial):
     # Suggest parameters for this trial
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
     dropout = trial.suggest_float("dropout", 0.1, 0.5)
-    embed_dim = trial.suggest_categorical("embed_dim", [4, 8, 16])
+    embed_dim = trial.suggest_categorical("embed_dim", [4, 8, 16,24])
     hidden1 = trial.suggest_int("hidden1", 64,512, step=64)
     hidden2 = trial.suggest_int("hidden2", 32,256,step=32)
     batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024])
     
     # Load dynamic datasets and instantiate the model
-    # Unpack the 6 returned values correctly
-    model, train_loader, test_loader, reg_vs, opc_vs, num_features = prepare_datasets(
-        device, TRAIN_FILES, TEST_FILES, 
+    model, train_loader, test_loader, reg_vs, opc_vs, num_features, scaler, reg_vocab, opc_vocab, numeric_cols = prepare_datasets(
+        device, TRAIN_FILES, TEST_FILES,
         embed_dim=embed_dim, hidden1=hidden1, hidden2=hidden2, dropout=dropout,
         batch_size=batch_size
     )
@@ -198,7 +190,7 @@ def main():
     study = optuna.create_study(direction="minimize")
     
     # Run search for 20 trials (training runs)
-    study.optimize(objective, n_trials=20)
+    study.optimize(objective, n_trials=100)
     
     best_params = study.best_params
 
@@ -212,30 +204,37 @@ def main():
 
     # Train the final model using the best hyperparameters found
     print("Training final model using best hyperparameters...")
-    model, train_loader, test_loader, reg_vs, opc_vs, num_features = prepare_datasets(
-        device, TRAIN_FILES, TEST_FILES, 
+    model, train_loader, test_loader, reg_vs, opc_vs, num_features, scaler, reg_vocab, opc_vocab, numeric_cols = prepare_datasets(
+        device, TRAIN_FILES, TEST_FILES,
         embed_dim=best_params["embed_dim"],
         hidden1=best_params["hidden1"],
         hidden2=best_params["hidden2"],
         dropout=best_params["dropout"],
         batch_size=best_params["batch_size"]
     )
-    
+
     loss_function = DynamicMissPredictionLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=best_params["lr"])
-    
+
     # Train one final time to converge on the optimal weights
     train(model, train_loader, test_loader, loss_function, optimizer, device)
 
-    # Save the model state dictionary and all config parameters to rebuild it later
+    # Save the model weights together with everything needed to preprocess
+    # raw test CSVs the same way at inference time (scaler + vocabs), so the
+    # checkpoint is self-sufficient and doesn't require re-fitting on
+    # TRAIN_FILES to evaluate later.
     checkpoint = {
         "model_state_dict": model.state_dict(),
         "hyperparameters": best_params,
         "reg_vocab_size": reg_vs,
         "opc_vocab_size": opc_vs,
-        "num_features": num_features
+        "num_features": num_features,
+        "scaler": scaler,
+        "reg_vocab": reg_vocab,
+        "opc_vocab": opc_vocab,
+        "numeric_cols": numeric_cols,
     }
-    
+
     torch.save(checkpoint, "EMB_CT.pth")
     print("Successfully saved best model and all parameters to 'EMB_CT.pth'!")
 
