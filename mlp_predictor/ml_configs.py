@@ -62,6 +62,12 @@ ROUTINE_TYPE_MAP = {
     "Recursive": 3,
 }
 
+LANGUAGE_MAP = {
+    "c": 1,
+    "cpp": 2,
+    "fortran": 3,
+}
+
 CONT_COLS = [
     "Offset",
 ]
@@ -90,4 +96,32 @@ ESP_EXTRA_DROP = [
     "Prev_Op_1", "Prev_Op_2", "Prev_Op_3", "Prev_Op_4", "Prev_Op_5",
     "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5",
     "reg1", "reg2", "reg3", "wreg1", "wreg2",
+]
+
+ESP_COLUMNS = [
+    'Opcode', 'Offset', 'Flag_Instr_Opcode', 'Routine_Type', 
+    'br_is_loop_header', 't_dominates', 't_post_dominates', 
+    't_is_loop_head', 't_is_backedge', 't_successor_ends', 
+    't_is_loop_exit', 't_has_call', 'f_dominates', 
+    'f_post_dominates', 'f_is_loop_head', 'f_is_backedge', 
+    'f_successor_ends', 'f_is_loop_exit', 'f_has_call', 
+    'taken_ubd', 'fall_ubd', 'Language', 'reg1_Op', 'reg2_Op', 
+    'reg3_Op'
+    ]
+
+CT_COLUMNS = [
+    "reg1", "reg2", "reg3", "wreg1", "wreg2",
+    "Opcode", "t_successor_ends", "f_successor_ends", "Flag_Instr_Opcode",
+    "reg1_Op", "reg2_Op", "reg3_Op",
+    "Prev_Op_1", "Prev_Op_2", "Prev_Op_3", "Prev_Op_4", "Prev_Op_5",
+    "Next_Op_1", "Next_Op_2", "Next_Op_3", "Next_Op_4", "Next_Op_5",
+    "br_is_loop_header",
+    "t_dominates", "t_post_dominates", "t_is_loop_head",
+    "t_is_backedge", "t_is_loop_exit", "t_has_call",
+    "f_dominates", "f_post_dominates", "f_is_loop_head",
+    "f_is_backedge", "f_is_loop_exit", "f_has_call",
+    "Same_BBL", "taken_ubd", "fall_ubd", "taken_store", "fall_store",
+    "Offset","Routine_Type"
+
+    
 ]
