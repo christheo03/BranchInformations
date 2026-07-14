@@ -1,7 +1,7 @@
 from ml_configs import os,torch,pd,np,re
 from ml_configs import (CLASS_HNT,CLASS_NB,CLASS_HT,
                         DROP_COLUMNS,BIN_COLS,CONT_COLS,ROUT_COL,REG_COLS,OPC_COLS,
-                        ROUTINE_TYPE_MAP)
+                        ROUTINE_TYPE_MAP,LANG_COL,LANGUAGE_MAP)
 from ml_configs import StandardScaler
 
 # Load raw data from csv files  
@@ -110,7 +110,7 @@ def encode_cols(df, cols, vocab):
     )
 
 # Normalizations
-def build_features(train_df, test_df):
+def build_features(train_df, test_df, return_artifacts=False):
     # Add features about registes read and reagister defined opcodes
     add_register_features(train_df, test_df)
 
@@ -128,8 +128,10 @@ def build_features(train_df, test_df):
         train_df[col] = train_df[col].fillna(0)
         test_df[col] = test_df[col].fillna(0)
 
-    # Routine_Type is a small fixed categorical feature:
-    # NonLeaf / Leaf / Recursive.
+    # Routine_Type is a small fixed categorical feature: NonLeaf/Leaf/
+    # Recursive -> 1/2/3, missing -> 0. One-hot encoded over just the 3 real
+    # categories (no separate dummy column for "missing") - a missing/
+    # unknown Routine_Type just gets an all-zero one-hot vector.
     train_df[ROUT_COL] = (
         train_df[ROUT_COL]
         .map(ROUTINE_TYPE_MAP)
@@ -144,7 +146,7 @@ def build_features(train_df, test_df):
         .astype(int)
     )
 
-    routine_categories = [0, 1, 2, 3]
+    routine_categories = [1, 2, 3]
 
     X_train_rout = pd.get_dummies(
         pd.Categorical(train_df[ROUT_COL], categories=routine_categories),
@@ -156,7 +158,6 @@ def build_features(train_df, test_df):
         prefix=ROUT_COL,
     ).astype(float).values
 
-
     # Normilize numeric values
     NUMERIC_COLS = CONT_COLS + BIN_COLS
 
@@ -165,7 +166,6 @@ def build_features(train_df, test_df):
 
     X_train_scaled = scaler.transform(train_df[NUMERIC_COLS])
     X_test_scaled = scaler.transform(test_df[NUMERIC_COLS])
-
 
     X_train_num = torch.tensor(
         np.hstack([X_train_scaled, X_train_rout]),
@@ -195,9 +195,6 @@ def build_features(train_df, test_df):
         dtype=torch.long,
     )
 
-
-
-
     X_test_cat = torch.tensor(
         np.hstack([
             encode_cols(test_df, REG_COLS, reg_vocab),
@@ -209,6 +206,22 @@ def build_features(train_df, test_df):
     y_train = torch.tensor(train_df["y"].values, dtype=torch.long)
     y_test = torch.tensor(test_df["y"].values, dtype=torch.long)
 
+    if return_artifacts:
+        return (
+            X_train_num,
+            X_train_cat,
+            y_train,
+            X_test_num,
+            X_test_cat,
+            y_test,
+            len(reg_vocab) + 1,
+            len(opc_vocab) + 1,
+            scaler,
+            reg_vocab,
+            opc_vocab,
+            NUMERIC_COLS,
+        )
+
     return (
         X_train_num,
         X_train_cat,
@@ -219,3 +232,84 @@ def build_features(train_df, test_df):
         len(reg_vocab) + 1,
         len(opc_vocab) + 1,
     )
+
+def std_scaler_norm(train_df, test_df, columns):
+    """
+    Standard scales the features that will be used in the model and builds vocabularies.
+
+    Args:
+        train_df (pd.DataFrame): The training dataset.
+        test_df (pd.DataFrame): The testing dataset.
+        columns (list): A list of column names that will be used in the model.
+
+    Returns:
+        tuple: A tuple containing:
+            X_train (torch.Tensor): The normalized, standard-scaled train set.
+            X_test (torch.Tensor): The normalized, standard-scaled test set.
+            scaler (StandardScaler): The fitted scaler containing the mean and std for every column.
+            reg_vocab (dict): Mapping of registers to integer IDs.
+            opc_vocab (dict): Mapping of opcodes to integer IDs.
+            columns (list): The final list of columns used in the model.
+    """
+    for col in [c for c in CONT_COLS + BIN_COLS if c in columns]:
+        train_df[col] = train_df[col].fillna(0)
+        test_df[col] = test_df[col].fillna(0)
+
+    if ROUT_COL in columns:
+        train_df[ROUT_COL] = train_df[ROUT_COL].map(ROUTINE_TYPE_MAP).fillna(0)
+        test_df[ROUT_COL] = test_df[ROUT_COL].map(ROUTINE_TYPE_MAP).fillna(0)
+
+    if LANG_COL in columns:
+        train_df[LANG_COL] = train_df[LANG_COL].map(LANGUAGE_MAP).fillna(0)
+        test_df[LANG_COL] = test_df[LANG_COL].map(LANGUAGE_MAP).fillna(0)
+
+    train_df = train_df[columns].copy()
+    test_df = test_df[columns].copy()
+
+    reg_cols = [c for c in REG_COLS if c in columns]
+    opc_cols = [c for c in OPC_COLS if c in columns]
+
+    for col in reg_cols + opc_cols:
+        train_df[col] = train_df[col].fillna("-1").astype(str)
+        test_df[col] = test_df[col].fillna("-1").astype(str)
+
+    reg_vocab = build_shared_vocab(train_df, reg_cols) if reg_cols else {}
+    opc_vocab = build_shared_vocab(train_df, opc_cols) if opc_cols else {}
+
+    for group_cols, vocab in ((reg_cols, reg_vocab), (opc_cols, opc_vocab)):
+        if not group_cols:
+            continue
+        train_encoded = encode_cols(train_df, group_cols, vocab)
+        test_encoded = encode_cols(test_df, group_cols, vocab)
+        for i, col in enumerate(group_cols):
+            train_df[col] = train_encoded[:, i]
+            test_df[col] = test_encoded[:, i]
+
+    scaler = StandardScaler()
+    X_train = torch.tensor(scaler.fit_transform(train_df), dtype=torch.float32)
+    X_test = torch.tensor(scaler.transform(test_df), dtype=torch.float32)
+
+    return X_train, X_test, scaler, reg_vocab, opc_vocab, columns
+
+
+def add_label_tnt(df):
+    """
+    Assign label (1/0) to each entry in the dataframe
+    """
+    rate = df["Taken"] / df["Executed"]
+    label = (rate > 0.5).astype(int)
+    return label
+
+def get_binary_error(outputs, weights, rates):
+    """
+    Calculates the total weighted error for binary predictions/
+
+    Args:
+        outputs: Model predictions
+        weights: Importance weight for each sample
+        rates: Ground truth labels (0 or 1)
+    """
+    y_k = outputs.squeeze(-1) if outputs.dim() > 1 else outputs
+    y_k_binary = (y_k > 0.5).float()
+    errors = ((1.0 - y_k_binary) * rates * weights) + (y_k_binary * (1.0 - rates) * weights)
+    return torch.sum(errors).item()
