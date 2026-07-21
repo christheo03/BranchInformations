@@ -156,7 +156,7 @@ def objective(trial):
         
     # Suggest parameters for this trial
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
-    dropout = trial.suggest_float("dropout", 0.1, 0.5)
+    dropout = trial.suggest_float("dropout", 0.2, 0.5)
     embed_dim = trial.suggest_categorical("embed_dim", [4, 8, 16,24])
     hidden1 = trial.suggest_int("hidden1", 64,512, step=64)
     hidden2 = trial.suggest_int("hidden2", 32,256,step=32)
@@ -190,7 +190,7 @@ def main():
     study = optuna.create_study(direction="minimize")
     
     # Run search for 20 trials (training runs)
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=75)
     
     best_params = study.best_params
 

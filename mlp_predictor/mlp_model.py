@@ -148,7 +148,7 @@ class MLP_TNT_emb(nn.Module):
         x_reg = x_cat[:, :self.n_reg]
         x_opc = x_cat[:, self.n_reg:self.n_reg + self.n_opc]
 
-        # 2. Vectorized embedding lookup (No python loops!)
+        
         # Shape results in: (batch_size, n_reg, embed_dim)
         reg_embeds = self.reg_emb(x_reg) 
         opc_embeds = self.opc_emb(x_opc)
