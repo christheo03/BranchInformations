@@ -6,6 +6,7 @@
 #include <vector>
 #include "pin.H"
 #include <unordered_map>
+#include <atomic>
 
 using std::cerr;
 using std::cout;
@@ -15,11 +16,12 @@ using std::ofstream;
 using std::setw;
 using std::string;
 using std::vector;
+using std::atomic;
 
 #define NUM_PREV 5
 
-UINT64 total_executions = 0;
-UINT64 total_taken = 0;
+atomic<UINT64> total_executions = 0;
+atomic<UINT64> total_taken = 0;
 UINT64 bbl_id = 0;
 
 struct regs
@@ -50,11 +52,11 @@ struct flag_instruction
 // Struct for branch Instructions
 struct branch
 {
-    UINT32 times_executed = 0;
+    atomic<UINT32> times_executed = 0;
     instruction prev_instr[NUM_PREV];
     instruction next_instr[NUM_PREV];
     flag_instruction flag_wr_instr;
-    UINT32 times_taken = 0;
+    atomic<UINT32> times_taken = 0;
     string opcode;
     INT32 offset = 0;
     USIZE size = 0;
