@@ -1,8 +1,8 @@
 from mlp_model import MLP_SS
 from data_engin import load_data, add_register_features, std_scaler_norm, add_label_tnt, get_binary_error
-from ml_configs import TEST_FILES, TRAIN_FILES, CT_COLUMNS
+from ml_configs import ALL_FILES, CT_COLUMNS
 from ml_configs import DataLoader, TensorDataset, torch
-from .criterion import DynamicMissPredictionLoss
+from .criterion import WeightedMissLoss
 import copy
 import optuna
 
@@ -72,7 +72,7 @@ def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout,
 
 
 def train(model, train_loader, test_loader, loss_func, optim, device, patience=25, trial=None):
-    best_test_err = float('inf')  
+    best_test_err = float('inf')
     patience_counter = 0
     best_model_state = None
     saved_epoch_test_err = 0.0
@@ -80,7 +80,7 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
     for epoch in range(EPOCHS):
         model.train()
         epoch_loss, epoch_train_err, total_train_w = 0.0, 0.0, 0.0
-        
+
         for x, y_target, weights, rates in train_loader:
             x,weights, rates =x.to(device), weights.to(device), rates.to(device)
             y_target = y_target.to(device).float()
@@ -88,15 +88,15 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
             optim.zero_grad()
 
             outputs = model(x)
-            loss = loss_func(outputs, y_target, weights, rates) 
+            loss = loss_func(outputs, y_target, weights, rates)
 
             loss.backward()
             optim.step()
-            
+
             epoch_loss += loss.item() * torch.sum(weights).item()
             epoch_train_err += get_binary_error(outputs, weights, rates)
             total_train_w += torch.sum(weights).item()
-      
+
         epoch_loss /= total_train_w
         epoch_train_err /= total_train_w
 
@@ -106,14 +106,14 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
             for x, _, weights, rates in test_loader:
                 x,weights, rates = x.to(device),weights.to(device), rates.to(device)
 
-                
+
                 outputs = model(x)
                 epoch_test_err += get_binary_error(outputs, weights, rates)
                 total_test_w += torch.sum(weights).item()
         epoch_test_err /= total_test_w
 
         print(f"Epoch {epoch+1:03d} | Loss: {epoch_loss:.5f} | Train Miss %: {epoch_train_err * 100:.3f}% | Test Miss %: {epoch_test_err * 100:.3f}%")
-        
+
         # Optuna pruning check (stops runs early that clearly won't win)
         if trial is not None:
             trial.report(epoch_test_err, epoch)
@@ -122,7 +122,7 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
 
         if epoch_test_err < best_test_err:
             best_test_err = epoch_test_err
-            patience_counter = 0  
+            patience_counter = 0
             best_model_state = copy.deepcopy(model.state_dict())
             saved_epoch_test_err = epoch_test_err
         else:
@@ -136,27 +136,27 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
     return saved_epoch_test_err
 
 
-def objective(trial):
+def objective(trial, train_files, test_files):
     if hasattr(torch, 'accelerator') and torch.accelerator.is_available():
         device = torch.accelerator.current_accelerator().type
     else:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+
     # Suggest parameters for this trial
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
     dropout = trial.suggest_float("dropout", 0.2, 0.5)
     hidden1 = trial.suggest_int("hidden1", 64,512, step=64)
     hidden2 = trial.suggest_int("hidden2", 32,256,step=32)
     batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024])
-    
+
 
     model, train_loader, test_loader, num_features, scaler, reg_vocab, opc_vocab, feature_columns = prepare_datasets(
-        device, TRAIN_FILES, TEST_FILES,
+        device, train_files, test_files,
         hidden1=hidden1, hidden2=hidden2, dropout=dropout,
         batch_size=batch_size
     )
-    
-    loss_function = DynamicMissPredictionLoss()
+
+    loss_function = WeightedMissLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     try:
         miss_rate = train(model, train_loader, test_loader, loss_function, optimizer, device, trial=trial)
@@ -165,63 +165,85 @@ def objective(trial):
     return miss_rate
 
 
+# Runs the held-out fold's test set through the trained model once and
+# reports (1 - accuracy) and the raw get_binary_error value - no checkpoint
+# is saved, this is purely for the leave-one-out evaluation numbers.
+def evaluate_fold(model, test_loader, device):
+    model.eval()
+    all_outputs, all_y, all_weights, all_rates = [], [], [], []
+
+    with torch.no_grad():
+        for x, y_target, weights, rates in test_loader:
+            x, weights, rates = x.to(device), weights.to(device), rates.to(device)
+            outputs = model(x)
+
+            all_outputs.append(outputs.cpu())
+            all_y.append(y_target)
+            all_weights.append(weights.cpu())
+            all_rates.append(rates.cpu())
+
+    outputs = torch.cat(all_outputs)
+    y = torch.cat(all_y)
+    weights = torch.cat(all_weights)
+    rates = torch.cat(all_rates)
+
+    preds = (outputs.squeeze(-1) > 0.5).float()
+    one_minus_accuracy = (preds != y).float().mean().item()
+    binary_error = get_binary_error(outputs, weights, rates)
+
+    return one_minus_accuracy, binary_error
+
+
 def main():
     if hasattr(torch, 'accelerator') and torch.accelerator.is_available():
         device = torch.accelerator.current_accelerator().type
     else:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    print("Starting automated Hyperparameter optimization...")
-    
-    # Create study
-    study = optuna.create_study(direction="minimize")
-    
-    # Run search for 20 trials (training runs)
-    study.optimize(objective, n_trials=75)
-    
-    best_params = study.best_params
+    results = []
 
-    # Print results
-    print(f"\n\n{'#' * 50}\nOPTIMIZATION COMPLETE\n{'#' * 50}")
-    print("Best Hyperparameters:")
-    for key, value in best_params.items():
-        print(f"  {key:<15} : {value}")
-    print(f"\nBest Test Miss Rate: {study.best_value * 100:.3f}%")
-    print(f"{'#' * 50}\n")
+    for test_file in ALL_FILES:
+        train_files = [f for f in ALL_FILES if f != test_file]
+        test_files = [test_file]
 
-    # Train the final model using the best hyperparameters found
-    print("Training final model using best hyperparameters...")
-    model, train_loader, test_loader, num_features, scaler, reg_vocab, opc_vocab, feature_columns = prepare_datasets(
-        device, TRAIN_FILES, TEST_FILES,
-        hidden1=best_params["hidden1"],
-        hidden2=best_params["hidden2"],
-        dropout=best_params["dropout"],
-        batch_size=best_params["batch_size"]
-    )
+        print(f"\n\n{'#' * 50}\nLEAVE-ONE-OUT FOLD - held out: {test_file}\n{'#' * 50}")
 
-    loss_function = DynamicMissPredictionLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=best_params["lr"])
+        study = optuna.create_study(direction="minimize")
+        study.optimize(lambda trial: objective(trial, train_files, test_files), n_trials=75)
 
-    # Train one final time to converge on the optimal weights
-    train(model, train_loader, test_loader, loss_function, optimizer, device)
+        best_params = study.best_params
+        print(f"[{test_file}] Best Hyperparameters: {best_params}")
+        print(f"[{test_file}] Best Test Miss Rate during search: {study.best_value * 100:.3f}%")
 
-    # Save the model weights together with everything needed to preprocess
-    # raw test CSVs the same way at inference time (scaler + vocabs), so the
-    # checkpoint is self-sufficient and doesn't require re-fitting on
-    # TRAIN_FILES to evaluate later.
-    checkpoint = {
-        "model_state_dict": model.state_dict(),
-        "hyperparameters": best_params,
-        "num_features": num_features,
-        "scaler": scaler,
-        "reg_vocab": reg_vocab,
-        "opc_vocab": opc_vocab,
-        "feature_columns": feature_columns,
-    }
+        model, train_loader, test_loader, num_features, scaler, reg_vocab, opc_vocab, feature_columns = prepare_datasets(
+            device, train_files, test_files,
+            hidden1=best_params["hidden1"],
+            hidden2=best_params["hidden2"],
+            dropout=best_params["dropout"],
+            batch_size=best_params["batch_size"]
+        )
 
-    torch.save(checkpoint, "SS_CT.pth")
-    print("Successfully saved best model and all parameters to 'SS_CT.pth'!")
+        loss_function = WeightedMissLoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=best_params["lr"])
 
-    
-if  __name__ == "__main__":
+        # Train one final time to converge on the optimal weights - not saved.
+        train(model, train_loader, test_loader, loss_function, optimizer, device)
+
+        one_minus_accuracy, binary_error = evaluate_fold(model, test_loader, device)
+
+        print(f"[{test_file}] 1 - Accuracy:     {one_minus_accuracy * 100:.3f}%")
+        print(f"[{test_file}] get_binary_error: {binary_error:.6f}")
+
+        results.append({
+            "test_file": test_file,
+            "one_minus_accuracy": one_minus_accuracy,
+            "binary_error": binary_error,
+        })
+
+    print(f"\n\n{'#' * 50}\nLEAVE-ONE-OUT SUMMARY\n{'#' * 50}")
+    for r in results:
+        print(f"  {r['test_file']:<20} 1-Accuracy: {r['one_minus_accuracy'] * 100:7.3f}%   get_binary_error: {r['binary_error']:.6f}")
+
+
+if __name__ == "__main__":
     main()
