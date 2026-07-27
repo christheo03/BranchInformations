@@ -34,12 +34,12 @@ ALL_FILES = [
     "557.xz_r", "503.bwaves_r",
 ]
 
-TEST_FILES = [
-    "503.bwaves_r",
+TEST_FILES = [    
+    "525.x264_r",
     "520.omnetpp_r",
-    "548.exchange2_r",
+    "511.povray_r",
     "549.fotonik3d_r",
-    "557.xz_r",
+    "519.lbm_r",
 ]
 
 TRAIN_FILES = [f for f in ALL_FILES if f not in TEST_FILES]
@@ -122,6 +122,4 @@ CT_COLUMNS = [
     "f_is_backedge", "f_is_loop_exit", "f_has_call",
     "Same_BBL", "taken_ubd", "fall_ubd", "taken_store", "fall_store",
     "Offset","Routine_Type"
-
-    
 ]

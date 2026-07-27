@@ -5,6 +5,7 @@ from ml_configs import DataLoader, TensorDataset, torch
 from .criterion import WeightedMissLoss
 import copy
 import optuna
+import argparse
 
 DATA_DIR = "../../results"
 N_CLASSES = 1
@@ -143,7 +144,7 @@ def objective(trial, train_files, test_files):
     dropout = trial.suggest_float("dropout", 0.2, 0.5)
     hidden1 = trial.suggest_int("hidden1", 64, 512, step=64)
     hidden2 = trial.suggest_int("hidden2", 32, 256, step=32)
-    batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024])
+    batch_size = trial.suggest_categorical("batch_size", [128,256, 512, 1024])
 
     model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns = prepare_datasets(
         device, train_files, test_files,
@@ -189,55 +190,60 @@ def evaluate_fold(model, test_loader, device):
     return one_minus_accuracy, binary_error
 
 
+# Runs one LOO fold end-to-end (search + retrain + eval) for a single
+# held-out file, so this can be dispatched to its own machine/process.
+def run_fold(test_file, device):
+    train_files = [f for f in ALL_FILES if f != test_file]
+    test_files = [test_file]
+
+    print(f"\n\n{'#' * 50}\nLEAVE-ONE-OUT FOLD - held out: {test_file}\n{'#' * 50}")
+
+    study = optuna.create_study(direction="minimize")
+    study.optimize(lambda trial: objective(trial, train_files, test_files), n_trials=75)
+
+    best_params = study.best_params
+    print(f"[{test_file}] Best Hyperparameters: {best_params}")
+    print(f"[{test_file}] Best Test Miss Rate during search: {study.best_value * 100:.3f}%")
+
+    model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns = prepare_datasets(
+        device, train_files, test_files,
+        hidden1=best_params["hidden1"],
+        hidden2=best_params["hidden2"],
+        dropout=best_params["dropout"],
+        batch_size=best_params["batch_size"]
+    )
+
+    loss_function = WeightedMissLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=best_params["lr"])
+
+    # Train one final time to converge on the optimal weights - not saved.
+    train(model, train_loader, test_loader, loss_function, optimizer, device)
+
+    one_minus_accuracy, binary_error = evaluate_fold(model, test_loader, device)
+
+    print(f"[{test_file}] 1 - Accuracy:     {one_minus_accuracy * 100:.3f}%")
+    print(f"[{test_file}] get_binary_error: {binary_error:.6f}")
+
+    return {"test_file": test_file, "one_minus_accuracy": one_minus_accuracy, "binary_error": binary_error}
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--test-file", required=True, choices=ALL_FILES,
+        help="Run this fold (held out as test).",
+    )
+    args = parser.parse_args()
+
     if hasattr(torch, 'accelerator') and torch.accelerator.is_available():
         device = torch.accelerator.current_accelerator().type
     else:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    results = []
+    result = run_fold(args.test_file, device)
 
-    for test_file in ALL_FILES:
-        train_files = [f for f in ALL_FILES if f != test_file]
-        test_files = [test_file]
-
-        print(f"\n\n{'#' * 50}\nLEAVE-ONE-OUT FOLD - held out: {test_file}\n{'#' * 50}")
-
-        study = optuna.create_study(direction="minimize")
-        study.optimize(lambda trial: objective(trial, train_files, test_files), n_trials=75)
-
-        best_params = study.best_params
-        print(f"[{test_file}] Best Hyperparameters: {best_params}")
-        print(f"[{test_file}] Best Test Miss Rate during search: {study.best_value * 100:.3f}%")
-
-        model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns = prepare_datasets(
-            device, train_files, test_files,
-            hidden1=best_params["hidden1"],
-            hidden2=best_params["hidden2"],
-            dropout=best_params["dropout"],
-            batch_size=best_params["batch_size"]
-        )
-
-        loss_function = WeightedMissLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=best_params["lr"])
-
-        # Train one final time to converge on the optimal weights - not saved.
-        train(model, train_loader, test_loader, loss_function, optimizer, device)
-
-        one_minus_accuracy, binary_error = evaluate_fold(model, test_loader, device)
-
-        print(f"[{test_file}] 1 - Accuracy:     {one_minus_accuracy * 100:.3f}%")
-        print(f"[{test_file}] get_binary_error: {binary_error:.6f}")
-
-        results.append({
-            "test_file": test_file,
-            "one_minus_accuracy": one_minus_accuracy,
-            "binary_error": binary_error,
-        })
-
-    print(f"\n\n{'#' * 50}\nLEAVE-ONE-OUT SUMMARY\n{'#' * 50}")
-    for r in results:
-        print(f"  {r['test_file']:<20} 1-Accuracy: {r['one_minus_accuracy'] * 100:7.3f}%   get_binary_error: {r['binary_error']:.6f}")
+    print(f"\n\n{'#' * 50}\nRESULT\n{'#' * 50}")
+    print(f"  {result['test_file']:<20} 1-Accuracy: {result['one_minus_accuracy'] * 100:7.3f}%   get_binary_error: {result['binary_error']:.6f}")
 
 
 if __name__ == "__main__":
