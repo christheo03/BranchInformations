@@ -31,3 +31,18 @@ class StaticMissLoss(nn.Module):
         y_k = outputs.squeeze(-1) if outputs.dim() > 1 else outputs
         errors = (1.0 - y_k) * rates + y_k * (1.0 - rates)
         return torch.mean(errors)
+
+
+class AccuracyLoss(nn.Module):
+    """
+    Static Miss-Rate: mean(|y_i - t_i|) where t is the discrete label
+    (0/1). Differentiable relaxation of 1-accuracy - minimum is exactly 0.
+    """
+
+    def __init__(self):
+        super(AccuracyLoss, self).__init__()
+
+    def forward(self, outputs, targets, weights, rates):
+        y_k = outputs.squeeze(-1) if outputs.dim() > 1 else outputs
+        errors = (1.0 - y_k) * targets + y_k * (1.0 - targets)
+        return torch.mean(errors)

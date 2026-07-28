@@ -1,8 +1,8 @@
 from mlp_model import MLP_ESP
-from data_engin import load_data, add_register_features, std_scaler_norm, add_label_tnt, get_binary_error
+from data_engin import load_data, add_register_features, std_scaler_norm, add_label_tnt, get_accuracy_error, get_binary_error
 from ml_configs import ALL_FILES, ESP_COLUMNS
 from ml_configs import DataLoader, TensorDataset, torch
-from .criterion import WeightedMissLoss
+from .criterion import AccuracyLoss
 import copy
 import optuna
 import argparse
@@ -76,7 +76,7 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
 
     for epoch in range(EPOCHS):
         model.train()
-        epoch_loss, epoch_train_err, total_train_w = 0.0, 0.0, 0.0
+        epoch_loss, epoch_train_err, total_train_n = 0.0, 0.0, 0
 
         for x, y_target, weights, rates in train_loader:
             x, weights, rates = x.to(device), weights.to(device), rates.to(device)
@@ -90,23 +90,24 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
             loss.backward()
             optim.step()
 
-            epoch_loss += loss.item() * torch.sum(weights).item()
-            epoch_train_err += get_binary_error(outputs, weights, rates)
-            total_train_w += torch.sum(weights).item()
+            epoch_loss += loss.item() * x.shape[0]
+            epoch_train_err += get_accuracy_error(outputs, y_target)
+            total_train_n += x.shape[0]
 
-        epoch_loss /= total_train_w
-        epoch_train_err /= total_train_w
+        epoch_loss /= total_train_n
+        epoch_train_err /= total_train_n
 
         model.eval()
-        epoch_test_err, total_test_w = 0.0, 0.0
+        epoch_test_err, total_test_n = 0.0, 0
         with torch.no_grad():
-            for x, _, weights, rates in test_loader:
-                x, weights, rates = x.to(device), weights.to(device), rates.to(device)
+            for x, y_target, weights, rates in test_loader:
+                x = x.to(device)
+                y_target = y_target.to(device).float()
 
                 outputs = model(x)
-                epoch_test_err += get_binary_error(outputs, weights, rates)
-                total_test_w += torch.sum(weights).item()
-        epoch_test_err /= total_test_w
+                epoch_test_err += get_accuracy_error(outputs, y_target)
+                total_test_n += x.shape[0]
+        epoch_test_err /= total_test_n
 
         print(f"Epoch {epoch+1:03d} | Loss: {epoch_loss:.5f} | Train Miss %: {epoch_train_err * 100:.3f}% | Test Miss %: {epoch_test_err * 100:.3f}%")
 
@@ -152,7 +153,7 @@ def objective(trial, train_files, test_files):
         batch_size=batch_size
     )
 
-    loss_function = WeightedMissLoss()
+    loss_function = AccuracyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     try:
         miss_rate = train(model, train_loader, test_loader, loss_function, optimizer, device, trial=trial)
@@ -162,21 +163,21 @@ def objective(trial, train_files, test_files):
 
 
 # Runs the held-out fold's test set through the trained model once and
-# reports (1 - accuracy) and the raw get_binary_error value - no checkpoint
-# is saved, this is purely for the leave-one-out evaluation numbers.
+# reports 1 - accuracy - no checkpoint is saved, this is purely for the
+# leave-one-out evaluation numbers.
 def evaluate_fold(model, test_loader, device):
     model.eval()
     all_outputs, all_y, all_weights, all_rates = [], [], [], []
 
     with torch.no_grad():
         for x, y_target, weights, rates in test_loader:
-            x, weights, rates = x.to(device), weights.to(device), rates.to(device)
+            x = x.to(device)
             outputs = model(x)
 
             all_outputs.append(outputs.cpu())
             all_y.append(y_target)
-            all_weights.append(weights.cpu())
-            all_rates.append(rates.cpu())
+            all_weights.append(weights)
+            all_rates.append(rates)
 
     outputs = torch.cat(all_outputs)
     y = torch.cat(all_y)
@@ -185,7 +186,10 @@ def evaluate_fold(model, test_loader, device):
 
     preds = (outputs.squeeze(-1) > 0.5).float()
     one_minus_accuracy = (preds != y).float().mean().item()
-    binary_error = get_binary_error(outputs, weights, rates)
+
+    # Weighted miss-rate metric - not what AccuracyLoss trains toward anymore,
+    # reported here purely as a diagnostic alongside 1-accuracy.
+    binary_error = get_binary_error(outputs, weights, rates) / weights.sum().item()
 
     return one_minus_accuracy, binary_error
 
@@ -199,7 +203,7 @@ def run_fold(test_file, device):
     print(f"\n\n{'#' * 50}\nLEAVE-ONE-OUT FOLD - held out: {test_file}\n{'#' * 50}")
 
     study = optuna.create_study(direction="minimize")
-    study.optimize(lambda trial: objective(trial, train_files, test_files), n_trials=75)
+    study.optimize(lambda trial: objective(trial, train_files, test_files), n_trials=65)
 
     best_params = study.best_params
     print(f"[{test_file}] Best Hyperparameters: {best_params}")
@@ -213,7 +217,7 @@ def run_fold(test_file, device):
         batch_size=best_params["batch_size"]
     )
 
-    loss_function = WeightedMissLoss()
+    loss_function = AccuracyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=best_params["lr"])
 
     # Train one final time to converge on the optimal weights - not saved.
@@ -222,7 +226,7 @@ def run_fold(test_file, device):
     one_minus_accuracy, binary_error = evaluate_fold(model, test_loader, device)
 
     print(f"[{test_file}] 1 - Accuracy:     {one_minus_accuracy * 100:.3f}%")
-    print(f"[{test_file}] get_binary_error: {binary_error:.6f}")
+    print(f"[{test_file}] Binary Error (weighted, not the training objective): {binary_error * 100:.3f}%")
 
     return {"test_file": test_file, "one_minus_accuracy": one_minus_accuracy, "binary_error": binary_error}
 
@@ -243,7 +247,7 @@ def main():
     result = run_fold(args.test_file, device)
 
     print(f"\n\n{'#' * 50}\nRESULT\n{'#' * 50}")
-    print(f"  {result['test_file']:<20} 1-Accuracy: {result['one_minus_accuracy'] * 100:7.3f}%   get_binary_error: {result['binary_error']:.6f}")
+    print(f"  {result['test_file']:<20} 1-Accuracy: {result['one_minus_accuracy'] * 100:7.3f}%   Binary Error: {result['binary_error'] * 100:7.3f}%")
 
 
 if __name__ == "__main__":
