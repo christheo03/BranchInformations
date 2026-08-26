@@ -41,11 +41,7 @@ def prepare_datasets(device, train_files, test_files, embed_dim, hidden1, hidden
 
     numeric_features = CONT_COLS + BIN_COLS + [f"{ROUT_COL}_{i}" for i in (1, 2, 3)]
     categorical_features = REG_COLS + OPC_COLS
-    print(f"[EMB_CT] Scaled numeric features ({len(numeric_features)}): {numeric_features}")
-    print(f"[EMB_CT] Embedded categorical features ({len(categorical_features)}): {categorical_features}")
 
-    print(f"[EMB_CT] Categorial data: {X_train_cat.shape}")
-    print(f"[EMB_CT] Numerical data: {X_train_num.shape}")
 
     g = torch.Generator()
 
@@ -124,7 +120,6 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
                 total_test_n += x_num.shape[0]
         epoch_test_err /= total_test_n
 
-        print(f"Epoch {epoch+1:03d} | Loss: {epoch_loss:.5f} | Train Miss %: {epoch_train_err * 100:.3f}% | Test Miss %: {epoch_test_err * 100:.3f}%")
 
         # Optuna pruning check (stops runs early that clearly won't win)
         if trial is not None:
@@ -140,7 +135,6 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"\n[EARLY STOPPING] No improvement in test miss rate for {patience} epochs. Stopping.")
                 break
 
     if best_model_state is not None:
@@ -216,14 +210,11 @@ def run_fold(test_file, device):
     train_files = [f for f in ALL_FILES if f != test_file]
     test_files = [test_file]
 
-    print(f"\n\n{'#' * 50}\nLEAVE-ONE-OUT FOLD - held out: {test_file}\n{'#' * 50}")
 
     study = optuna.create_study(direction="minimize")
     study.optimize(lambda trial: objective(trial, train_files, test_files), n_trials=80)
 
     best_params = study.best_params
-    print(f"[{test_file}] Best Hyperparameters: {best_params}")
-    print(f"[{test_file}] Best Test Miss Rate during search: {study.best_value * 100:.3f}%")
 
     model, train_loader, test_loader, reg_vs, opc_vs, num_features, scaler, reg_vocab, opc_vocab, numeric_cols = prepare_datasets(
         device, train_files, test_files,
@@ -242,8 +233,6 @@ def run_fold(test_file, device):
 
     one_minus_accuracy, binary_error = evaluate_fold(model, test_loader, device)
 
-    print(f"[{test_file}] 1 - Accuracy:     {one_minus_accuracy * 100:.3f}%")
-    print(f"[{test_file}] Binary Error (weighted, not the training objective): {binary_error * 100:.3f}%")
 
     return {"test_file": test_file, "one_minus_accuracy": one_minus_accuracy, "binary_error": binary_error}
 
@@ -263,8 +252,8 @@ def main():
 
     result = run_fold(args.test_file, device)
 
-    print(f"\n\n{'#' * 50}\nRESULT\n{'#' * 50}")
-    print(f"  {result['test_file']:<20} 1-Accuracy: {result['one_minus_accuracy'] * 100:7.3f}%   Binary Error: {result['binary_error'] * 100:7.3f}%")
+    print(f"\n\n{'#' * 50}\n{args.test_file}\n{'#' * 50}")
+    print(f"  {result['test_file']:<20} Static - Loss: {result['one_minus_accuracy'] * 100:7.3f}%   Dynamic Weighted loss: {result['binary_error'] * 100:7.3f}%")
 
 
 if __name__ == "__main__":

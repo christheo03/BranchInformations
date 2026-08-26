@@ -37,8 +37,6 @@ def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout,
         train_df, test_df, CT_COLUMNS
     )
 
-    print(f"[SS_CT] Features used ({len(feature_columns)}): {feature_columns}")
-    print(f"X_train shape: {X_train.shape}")
 
     # Initialize DataLoaders
     g = torch.Generator()
@@ -113,7 +111,6 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
                 total_test_n += x.shape[0]
         epoch_test_err /= total_test_n
 
-        print(f"Epoch {epoch+1:03d} | Loss: {epoch_loss:.5f} | Train Miss %: {epoch_train_err * 100:.3f}% | Test Miss %: {epoch_test_err * 100:.3f}%")
 
         # Optuna pruning check (stops runs early that clearly won't win)
         if trial is not None:
@@ -129,7 +126,6 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"\n[EARLY STOPPING] No improvement in test miss rate for {patience} epochs. Stopping.")
                 break
 
     if best_model_state is not None:
@@ -204,14 +200,11 @@ def run_fold(test_file, device):
     train_files = [f for f in ALL_FILES if f != test_file]
     test_files = [test_file]
 
-    print(f"\n\n{'#' * 50}\nLEAVE-ONE-OUT FOLD - held out: {test_file}\n{'#' * 50}")
 
     study = optuna.create_study(direction="minimize")
     study.optimize(lambda trial: objective(trial, train_files, test_files), n_trials=65)
 
     best_params = study.best_params
-    print(f"[{test_file}] Best Hyperparameters: {best_params}")
-    print(f"[{test_file}] Best Test Miss Rate during search: {study.best_value * 100:.3f}%")
 
     model, train_loader, test_loader, num_features, scaler, reg_vocab, opc_vocab, feature_columns = prepare_datasets(
         device, train_files, test_files,
@@ -229,8 +222,6 @@ def run_fold(test_file, device):
 
     one_minus_accuracy, binary_error = evaluate_fold(model, test_loader, device)
 
-    print(f"[{test_file}] 1 - Accuracy:     {one_minus_accuracy * 100:.3f}%")
-    print(f"[{test_file}] Binary Error (weighted, not the training objective): {binary_error * 100:.3f}%")
 
     return {"test_file": test_file, "one_minus_accuracy": one_minus_accuracy, "binary_error": binary_error}
 
@@ -250,7 +241,7 @@ def main():
 
     result = run_fold(args.test_file, device)
 
-    print(f"\n\n{'#' * 50}\nRESULT\n{'#' * 50}")
+    print(f"\n\n{'#' * 50}\n{args.test_file}\n{'#' * 50}")
     print(f"  {result['test_file']:<20} 1-Accuracy: {result['one_minus_accuracy'] * 100:7.3f}%   Binary Error: {result['binary_error'] * 100:7.3f}%")
 
 
