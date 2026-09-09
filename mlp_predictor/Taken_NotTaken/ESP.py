@@ -6,21 +6,33 @@ from .criterion import AccuracyLoss
 import copy
 import optuna
 import argparse
+import os
 
 DATA_DIR = "../../results"
+MODEL_NAME = "ESP"
 N_CLASSES = 1
 EPOCHS = 200
 
 # Prepare the model (Normalization, Model Architecture)
-def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout, batch_size):
+def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout, batch_size, min_executed=0):
 
     # Load raw data from csv files
     train_df = load_data(DATA_DIR, train_files)
     test_df = load_data(DATA_DIR, test_files)
 
+    # Drop training branches with too few executions - their Taken/Executed
+    # rate is an unreliable label from too small a sample. Test data is left
+    # untouched so evaluation still covers every branch in the held-out file.
+    train_df = train_df[train_df["Executed"] >= min_executed].reset_index(drop=True)
+
     # Add labels
     train_df["y"] = add_label_tnt(train_df)
     test_df["y"] = add_label_tnt(test_df)
+
+    # Snapshot the raw, human-readable rows before feature engineering
+    # mutates/encodes columns in place - this is what misclassified
+    # branches get exported from later.
+    test_df_raw = test_df.copy()
 
     train_weights = torch.tensor(train_df["weight"].values, dtype=torch.float32)
     train_rates = torch.tensor(train_df["rate"].values, dtype=torch.float32)
@@ -64,7 +76,7 @@ def prepare_datasets(device, train_files, test_files, hidden1, hidden2, dropout,
         dropout=dropout,
     ).to(device)
 
-    return model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns
+    return model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns, test_df_raw
 
 def train(model, train_loader, test_loader, loss_func, optim, device, patience=25, trial=None):
     best_test_err = float('inf')
@@ -130,7 +142,7 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
     return saved_epoch_test_err
 
 
-def objective(trial, train_files, test_files):
+def objective(trial, train_files, test_files, min_executed=0):
     if hasattr(torch, 'accelerator') and torch.accelerator.is_available():
         device = torch.accelerator.current_accelerator().type
     else:
@@ -143,10 +155,10 @@ def objective(trial, train_files, test_files):
     hidden2 = trial.suggest_int("hidden2", 32, 256, step=32)
     batch_size = trial.suggest_categorical("batch_size", [128,256, 512, 1024])
 
-    model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns = prepare_datasets(
+    model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns, _ = prepare_datasets(
         device, train_files, test_files,
         hidden1=hidden1, hidden2=hidden2, dropout=dropout,
-        batch_size=batch_size
+        batch_size=batch_size, min_executed=min_executed
     )
 
     loss_function = AccuracyLoss()
@@ -187,27 +199,43 @@ def evaluate_fold(model, test_loader, device):
     # reported here purely as a diagnostic alongside 1-accuracy.
     binary_error = get_binary_error(outputs, weights, rates) / weights.sum().item()
 
-    return one_minus_accuracy, binary_error
+    return one_minus_accuracy, binary_error, preds, y
+
+
+# Writes every misclassified branch (raw features + predicted/actual label)
+# from the final, fully-trained model to its own CSV.
+def export_misclassified(test_df_raw, preds, y_true, test_file):
+    mask = (preds.numpy() != y_true.numpy()).astype(bool)
+    misclassified = test_df_raw.loc[mask].copy()
+    misclassified["predicted"] = preds.numpy()[mask].astype(int)
+    misclassified["actual"] = y_true.numpy()[mask].astype(int)
+
+    out_dir = "./misclassified"
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"{MODEL_NAME}_{test_file}.csv")
+    misclassified.to_csv(out_path, index=False)
+    return out_path, len(misclassified)
 
 
 # Runs one LOO fold end-to-end (search + retrain + eval) for a single
 # held-out file, so this can be dispatched to its own machine/process.
-def run_fold(test_file, device):
+def run_fold(test_file, device, min_executed=0):
     train_files = [f for f in ALL_FILES if f != test_file]
     test_files = [test_file]
 
 
     study = optuna.create_study(direction="minimize")
-    study.optimize(lambda trial: objective(trial, train_files, test_files), n_trials=65)
+    study.optimize(lambda trial: objective(trial, train_files, test_files, min_executed=min_executed), n_trials=65)
 
     best_params = study.best_params
 
-    model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns = prepare_datasets(
+    model, train_loader, test_loader, num_features, scaler, opc_vocab, feature_columns, test_df_raw = prepare_datasets(
         device, train_files, test_files,
         hidden1=best_params["hidden1"],
         hidden2=best_params["hidden2"],
         dropout=best_params["dropout"],
-        batch_size=best_params["batch_size"]
+        batch_size=best_params["batch_size"],
+        min_executed=min_executed,
     )
 
     loss_function = AccuracyLoss()
@@ -216,10 +244,17 @@ def run_fold(test_file, device):
     # Train one final time to converge on the optimal weights - not saved.
     train(model, train_loader, test_loader, loss_function, optimizer, device)
 
-    one_minus_accuracy, binary_error = evaluate_fold(model, test_loader, device)
+    one_minus_accuracy, binary_error, preds, y_true = evaluate_fold(model, test_loader, device)
 
+    misclassified_path, misclassified_count = export_misclassified(test_df_raw, preds, y_true, test_file)
 
-    return {"test_file": test_file, "one_minus_accuracy": one_minus_accuracy, "binary_error": binary_error}
+    return {
+        "test_file": test_file,
+        "one_minus_accuracy": one_minus_accuracy,
+        "binary_error": binary_error,
+        "misclassified_path": misclassified_path,
+        "misclassified_count": misclassified_count,
+    }
 
 
 def main():
@@ -227,6 +262,10 @@ def main():
     parser.add_argument(
         "--test-file", required=True, choices=ALL_FILES,
         help="Run this fold (held out as test).",
+    )
+    parser.add_argument(
+        "--min-executed", type=int, default=0,
+        help="Drop training branches with Executed below this count (test set is untouched).",
     )
     args = parser.parse_args()
 
@@ -236,10 +275,11 @@ def main():
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     print(f"Using {device}")
-    result = run_fold(args.test_file, device)
+    result = run_fold(args.test_file, device, min_executed=args.min_executed)
 
     print(f"\n\n{'#' * 50}\n{args.test_file}\n{'#' * 50}")
     print(f"  {result['test_file']:<20} 1-Accuracy: {result['one_minus_accuracy'] * 100:7.3f}%   Binary Error: {result['binary_error'] * 100:7.3f}%")
+    print(f"  Misclassified: {result['misclassified_count']} branches -> {result['misclassified_path']}")
 
 
 if __name__ == "__main__":
