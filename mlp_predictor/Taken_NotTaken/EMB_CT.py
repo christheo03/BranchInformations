@@ -3,11 +3,13 @@ from data_engin import load_data, build_features, add_label_tnt, get_accuracy_er
 from ml_configs import ALL_FILES
 from ml_configs import CONT_COLS, BIN_COLS, ROUT_COL, REG_COLS, OPC_COLS
 from ml_configs import DataLoader, TensorDataset, torch
-from .criterion import AccuracyLoss
+from .criterion import WeightedMissLoss
 import copy
 import optuna
 import argparse
 import os
+
+optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 DATA_DIR = "../../results"
 MODEL_NAME = "EMB_CT"
@@ -114,7 +116,7 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
             optim.step()
 
             epoch_loss += loss.item() * x_num.shape[0]
-            epoch_train_err += get_accuracy_error(outputs, y_target)
+            epoch_train_err += get_binary_error(outputs, weights,rates)
             total_train_n += x_num.shape[0]
 
         epoch_loss /= total_train_n
@@ -125,10 +127,11 @@ def train(model, train_loader, test_loader, loss_func, optim, device, patience=2
         with torch.no_grad():
             for x_num, x_cat, y_target, weights, rates in test_loader:
                 x_num, x_cat = x_num.to(device), x_cat.to(device)
+                weights, rates = weights.to(device), rates.to(device)
                 y_target = y_target.to(device).float()
 
                 outputs = model(x_num, x_cat)
-                epoch_test_err += get_accuracy_error(outputs, y_target)
+                epoch_test_err += get_binary_error(outputs, weights,rates)
                 total_test_n += x_num.shape[0]
         epoch_test_err /= total_test_n
 
@@ -175,7 +178,7 @@ def objective(trial, train_files, test_files, min_executed=0):
         batch_size=batch_size, min_executed=min_executed
     )
 
-    loss_function = AccuracyLoss()
+    loss_function = WeightedMissLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     try:
         miss_rate = train(model, train_loader, test_loader, loss_function, optimizer, device, trial=trial)
@@ -216,19 +219,19 @@ def evaluate_fold(model, test_loader, device):
     return one_minus_accuracy, binary_error, preds, y
 
 
-# Writes every misclassified branch (raw features + predicted/actual label)
-# from the final, fully-trained model to its own CSV.
-def export_misclassified(test_df_raw, preds, y_true, test_file):
-    mask = (preds.numpy() != y_true.numpy()).astype(bool)
-    misclassified = test_df_raw.loc[mask].copy()
-    misclassified["predicted"] = preds.numpy()[mask].astype(int)
-    misclassified["actual"] = y_true.numpy()[mask].astype(int)
+# Writes every branch in the test file (raw features + predicted/actual
+# label) from the final, fully-trained model to one CSV - correct and
+# incorrect predictions together.
+def export_predictions(test_df_raw, preds, y_true, test_file):
+    predictions = test_df_raw.copy()
+    predictions["predicted"] = preds.numpy().astype(int)
+    predictions["actual"] = y_true.numpy().astype(int)
 
-    out_dir = "./misclassified"
+    out_dir = "./predictions"
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, f"{MODEL_NAME}_{test_file}.csv")
-    misclassified.to_csv(out_path, index=False)
-    return out_path, len(misclassified)
+    predictions.to_csv(out_path, index=False)
+    return out_path, len(predictions)
 
 
 # Runs one LOO fold end-to-end (search + retrain + eval) for a single
@@ -253,7 +256,7 @@ def run_fold(test_file, device, min_executed=0):
         min_executed=min_executed,
     )
 
-    loss_function = AccuracyLoss()
+    loss_function = WeightedMissLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=best_params["lr"])
 
     # Train one final time to converge on the optimal weights - not saved.
@@ -261,14 +264,14 @@ def run_fold(test_file, device, min_executed=0):
 
     one_minus_accuracy, binary_error, preds, y_true = evaluate_fold(model, test_loader, device)
 
-    misclassified_path, misclassified_count = export_misclassified(test_df_raw, preds, y_true, test_file)
+    predictions_path, predictions_count = export_predictions(test_df_raw, preds, y_true, test_file)
 
     return {
         "test_file": test_file,
         "one_minus_accuracy": one_minus_accuracy,
         "binary_error": binary_error,
-        "misclassified_path": misclassified_path,
-        "misclassified_count": misclassified_count,
+        "predictions_path": predictions_path,
+        "predictions_count": predictions_count,
     }
 
 
@@ -293,7 +296,7 @@ def main():
 
     print(f"\n\n{'#' * 50}\n{args.test_file}\n{'#' * 50}")
     print(f"  {result['test_file']:<20} Static - Loss: {result['one_minus_accuracy'] * 100:7.3f}%   Dynamic Weighted loss: {result['binary_error'] * 100:7.3f}%")
-    print(f"  Misclassified: {result['misclassified_count']} branches -> {result['misclassified_path']}")
+    print(f"  Predictions: {result['predictions_count']} branches -> {result['predictions_path']}")
 
 
 if __name__ == "__main__":
