@@ -11,7 +11,7 @@ import os
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-DATA_DIR = "../../results"
+DATA_DIR = "../results"
 MODEL_NAME = "EMB_CT"
 N_CLASSES = 1
 EPOCHS = 200

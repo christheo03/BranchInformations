@@ -1,0 +1,84 @@
+
+
+##################################################
+507.cactuBSSN_r
+##################################################
+  507.cactuBSSN_r      Static - Loss:  37.640%   Dynamic Weighted loss:  16.130%
+  Predictions: 11586 branches -> ./predictions/EMB_CT_507.cactuBSSN_r.csv
+
+
+##################################################
+502.gcc_r
+##################################################
+  502.gcc_r            Static - Loss:  36.300%   Dynamic Weighted loss:  32.187%
+  Predictions: 86519 branches -> ./predictions/EMB_CT_502.gcc_r.csv
+
+
+##################################################
+519.lbm_r
+##################################################
+  519.lbm_r            Static - Loss:  34.971%   Dynamic Weighted loss:   3.471%
+  Predictions: 1018 branches -> ./predictions/EMB_CT_519.lbm_r.csv
+
+
+##################################################
+505.mcf_r
+##################################################
+  505.mcf_r            Static - Loss:  27.184%   Dynamic Weighted loss:  25.841%
+  Predictions: 309 branches -> ./predictions/EMB_CT_505.mcf_r.csv
+
+
+##################################################
+508.namd_r
+##################################################
+  508.namd_r           Static - Loss:  35.543%   Dynamic Weighted loss:  19.299%
+  Predictions: 3500 branches -> ./predictions/EMB_CT_508.namd_r.csv
+
+
+##################################################
+520.omnetpp_r
+##################################################
+  520.omnetpp_r        Static - Loss:  40.078%   Dynamic Weighted loss:  29.414%
+  Predictions: 8930 branches -> ./predictions/EMB_CT_520.omnetpp_r.csv
+
+
+##################################################
+510.parest_r
+##################################################
+  510.parest_r         Static - Loss:  33.265%   Dynamic Weighted loss:  26.873%
+  Predictions: 15548 branches -> ./predictions/EMB_CT_510.parest_r.csv
+
+
+##################################################
+500.perlbench_r
+##################################################
+  500.perlbench_r      Static - Loss:  36.729%   Dynamic Weighted loss:  30.818%
+  Predictions: 17131 branches -> ./predictions/EMB_CT_500.perlbench_r.csv
+
+
+##################################################
+511.povray_r
+##################################################
+  511.povray_r         Static - Loss:  32.748%   Dynamic Weighted loss:  38.214%
+  Predictions: 7289 branches -> ./predictions/EMB_CT_511.povray_r.csv
+
+
+##################################################
+521.wrf_r
+##################################################
+  521.wrf_r            Static - Loss:  36.077%   Dynamic Weighted loss:  21.262%
+  Predictions: 40236 branches -> ./predictions/EMB_CT_521.wrf_r.csv
+
+
+##################################################
+525.x264_r
+##################################################
+  525.x264_r           Static - Loss:  38.803%   Dynamic Weighted loss:  23.496%
+  Predictions: 4479 branches -> ./predictions/EMB_CT_525.x264_r.csv
+
+
+##################################################
+523.xalancbmk_r
+##################################################
+  523.xalancbmk_r      Static - Loss:  34.574%   Dynamic Weighted loss:  17.451%
+  Predictions: 13591 branches -> ./predictions/EMB_CT_523.xalancbmk_r.csv

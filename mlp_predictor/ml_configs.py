@@ -23,7 +23,7 @@ CLASS_NB = 1
 CLASS_HT = 2
 N_CLASSES = 3
 
-DATA_DIR = "../../results"
+DATA_DIR = "../results"
 
 ALL_FILES = [
     "500.perlbench_r", "502.gcc_r", "505.mcf_r", "507.cactuBSSN_r",

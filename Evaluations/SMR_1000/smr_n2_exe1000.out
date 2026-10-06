@@ -1,0 +1,242 @@
+
+
+##################################################
+526.blender_r
+##################################################
+  526.blender_r        Static - Loss:  32.461%   Dynamic Weighted loss:  32.704%
+  Misclassified: 4825 branches -> ./misclassified/EMB_CT_526.blender_r.csv
+
+
+##################################################
+503.bwaves_r
+##################################################
+  503.bwaves_r         Static - Loss:  21.693%   Dynamic Weighted loss:  20.954%
+  Misclassified: 492 branches -> ./misclassified/EMB_CT_503.bwaves_r.csv
+
+
+##################################################
+527.cam4_r
+##################################################
+  527.cam4_r           Static - Loss:  25.092%   Dynamic Weighted loss:  24.676%
+  Misclassified: 5787 branches -> ./misclassified/EMB_CT_527.cam4_r.csv
+
+
+##################################################
+531.deepsjeng_r
+##################################################
+  531.deepsjeng_r      Static - Loss:  29.175%   Dynamic Weighted loss:  33.995%
+  Misclassified: 767 branches -> ./misclassified/EMB_CT_531.deepsjeng_r.csv
+
+
+##################################################
+548.exchange2_r
+##################################################
+  548.exchange2_r      Static - Loss:  23.439%   Dynamic Weighted loss:  35.178%
+  Misclassified: 766 branches -> ./misclassified/EMB_CT_548.exchange2_r.csv
+
+
+##################################################
+549.fotonik3d_r
+##################################################
+  549.fotonik3d_r      Static - Loss:  18.645%   Dynamic Weighted loss:  18.424%
+  Misclassified: 886 branches -> ./misclassified/EMB_CT_549.fotonik3d_r.csv
+
+
+##################################################
+538.imagick_r
+##################################################
+  538.imagick_r        Static - Loss:  28.170%   Dynamic Weighted loss:  20.650%
+  Misclassified: 1142 branches -> ./misclassified/EMB_CT_538.imagick_r.csv
+
+
+##################################################
+541.leela_r
+##################################################
+  541.leela_r          Static - Loss:  28.445%   Dynamic Weighted loss:  31.262%
+  Misclassified: 1158 branches -> ./misclassified/EMB_CT_541.leela_r.csv
+
+
+##################################################
+544.nab_r
+##################################################
+  544.nab_r            Static - Loss:  21.520%   Dynamic Weighted loss:  18.753%
+  Misclassified: 637 branches -> ./misclassified/EMB_CT_544.nab_r.csv
+
+
+##################################################
+554.roms_r
+##################################################
+  554.roms_r           Static - Loss:  18.379%   Dynamic Weighted loss:  12.325%
+  Misclassified: 1256 branches -> ./misclassified/EMB_CT_554.roms_r.csv
+
+
+##################################################
+557.xz_r
+##################################################
+  557.xz_r             Static - Loss:  29.392%   Dynamic Weighted loss:  32.179%
+  Misclassified: 624 branches -> ./misclassified/EMB_CT_557.xz_r.csv
+Using cuda
+
+
+##################################################
+526.blender_r
+##################################################
+  526.blender_r        1-Accuracy:  34.829%   Binary Error:  35.842%
+  Misclassified: 5177 branches -> ./misclassified/ESP_526.blender_r.csv
+Using cuda
+
+
+##################################################
+503.bwaves_r
+##################################################
+  503.bwaves_r         1-Accuracy:  27.205%   Binary Error:  24.455%
+  Misclassified: 617 branches -> ./misclassified/ESP_503.bwaves_r.csv
+Using cuda
+
+
+##################################################
+527.cam4_r
+##################################################
+  527.cam4_r           1-Accuracy:  26.961%   Binary Error:  30.491%
+  Misclassified: 6218 branches -> ./misclassified/ESP_527.cam4_r.csv
+Using cuda
+
+
+##################################################
+531.deepsjeng_r
+##################################################
+  531.deepsjeng_r      1-Accuracy:  33.663%   Binary Error:  37.532%
+  Misclassified: 885 branches -> ./misclassified/ESP_531.deepsjeng_r.csv
+Using cuda
+
+
+##################################################
+548.exchange2_r
+##################################################
+  548.exchange2_r      1-Accuracy:  26.775%   Binary Error:  37.512%
+  Misclassified: 875 branches -> ./misclassified/ESP_548.exchange2_r.csv
+Using cuda
+
+
+##################################################
+549.fotonik3d_r
+##################################################
+  549.fotonik3d_r      1-Accuracy:  24.958%   Binary Error:  15.879%
+  Misclassified: 1186 branches -> ./misclassified/ESP_549.fotonik3d_r.csv
+Using cuda
+
+
+##################################################
+538.imagick_r
+##################################################
+  538.imagick_r        1-Accuracy:  31.327%   Binary Error:  25.045%
+  Misclassified: 1270 branches -> ./misclassified/ESP_538.imagick_r.csv
+Using cuda
+
+
+##################################################
+541.leela_r
+##################################################
+  541.leela_r          1-Accuracy:  35.814%   Binary Error:  31.022%
+  Misclassified: 1458 branches -> ./misclassified/ESP_541.leela_r.csv
+Using cuda
+
+
+##################################################
+544.nab_r
+##################################################
+  544.nab_r            1-Accuracy:  29.324%   Binary Error:  20.630%
+  Misclassified: 868 branches -> ./misclassified/ESP_544.nab_r.csv
+Using cuda
+
+
+##################################################
+554.roms_r
+##################################################
+  554.roms_r           1-Accuracy:  22.608%   Binary Error:  15.640%
+  Misclassified: 1545 branches -> ./misclassified/ESP_554.roms_r.csv
+Using cuda
+
+
+##################################################
+557.xz_r
+##################################################
+  557.xz_r             1-Accuracy:  32.454%   Binary Error:  32.702%
+  Misclassified: 689 branches -> ./misclassified/ESP_557.xz_r.csv
+
+
+##################################################
+526.blender_r
+##################################################
+  526.blender_r        1-Accuracy:  34.486%   Binary Error:  35.288%
+  Misclassified: 5126 branches -> ./misclassified/SS_CT_526.blender_r.csv
+
+
+##################################################
+503.bwaves_r
+##################################################
+  503.bwaves_r         1-Accuracy:  23.765%   Binary Error:  22.468%
+  Misclassified: 539 branches -> ./misclassified/SS_CT_503.bwaves_r.csv
+
+
+##################################################
+527.cam4_r
+##################################################
+  527.cam4_r           1-Accuracy:  26.562%   Binary Error:  24.322%
+  Misclassified: 6126 branches -> ./misclassified/SS_CT_527.cam4_r.csv
+
+
+##################################################
+531.deepsjeng_r
+##################################################
+  531.deepsjeng_r      1-Accuracy:  34.310%   Binary Error:  37.691%
+  Misclassified: 902 branches -> ./misclassified/SS_CT_531.deepsjeng_r.csv
+
+
+##################################################
+548.exchange2_r
+##################################################
+  548.exchange2_r      1-Accuracy:  27.387%   Binary Error:  35.862%
+  Misclassified: 895 branches -> ./misclassified/SS_CT_548.exchange2_r.csv
+
+
+##################################################
+549.fotonik3d_r
+##################################################
+  549.fotonik3d_r      1-Accuracy:  20.455%   Binary Error:  11.370%
+  Misclassified: 972 branches -> ./misclassified/SS_CT_549.fotonik3d_r.csv
+
+
+##################################################
+538.imagick_r
+##################################################
+  538.imagick_r        1-Accuracy:  32.659%   Binary Error:  28.035%
+  Misclassified: 1324 branches -> ./misclassified/SS_CT_538.imagick_r.csv
+
+
+##################################################
+541.leela_r
+##################################################
+  541.leela_r          1-Accuracy:  34.832%   Binary Error:  31.643%
+  Misclassified: 1418 branches -> ./misclassified/SS_CT_541.leela_r.csv
+
+
+##################################################
+544.nab_r
+##################################################
+  544.nab_r            1-Accuracy:  28.581%   Binary Error:  18.586%
+  Misclassified: 846 branches -> ./misclassified/SS_CT_544.nab_r.csv
+
+
+##################################################
+554.roms_r
+##################################################
+  554.roms_r           1-Accuracy:  21.408%   Binary Error:  14.335%
+  Misclassified: 1463 branches -> ./misclassified/SS_CT_554.roms_r.csv
+
+
+##################################################
+557.xz_r
+##################################################
+  557.xz_r             1-Accuracy:  32.925%   Binary Error:  30.988%
+  Misclassified: 699 branches -> ./misclassified/SS_CT_557.xz_r.csv

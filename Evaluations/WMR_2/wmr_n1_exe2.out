@@ -1,0 +1,96 @@
+
+
+##################################################
+507.cactuBSSN_r
+##################################################
+  507.cactuBSSN_r      Static - Loss:  37.355%   Dynamic Weighted loss:  14.800%
+  Misclassified: 4328 branches -> ./misclassified/EMB_CT_507.cactuBSSN_r.csv
+  Classified:    7258 branches -> ./classified/EMB_CT_507.cactuBSSN_r.csv
+
+
+##################################################
+502.gcc_r
+##################################################
+  502.gcc_r            Static - Loss:  37.416%   Dynamic Weighted loss:  32.198%
+  Misclassified: 32372 branches -> ./misclassified/EMB_CT_502.gcc_r.csv
+  Classified:    54147 branches -> ./classified/EMB_CT_502.gcc_r.csv
+
+
+##################################################
+519.lbm_r
+##################################################
+  519.lbm_r            Static - Loss:  35.658%   Dynamic Weighted loss:   3.926%
+  Misclassified: 363 branches -> ./misclassified/EMB_CT_519.lbm_r.csv
+  Classified:    655 branches -> ./classified/EMB_CT_519.lbm_r.csv
+
+
+##################################################
+505.mcf_r
+##################################################
+  505.mcf_r            Static - Loss:  31.068%   Dynamic Weighted loss:  29.243%
+  Misclassified: 96 branches -> ./misclassified/EMB_CT_505.mcf_r.csv
+  Classified:    213 branches -> ./classified/EMB_CT_505.mcf_r.csv
+
+
+##################################################
+508.namd_r
+##################################################
+  508.namd_r           Static - Loss:  35.771%   Dynamic Weighted loss:  20.190%
+  Misclassified: 1252 branches -> ./misclassified/EMB_CT_508.namd_r.csv
+  Classified:    2248 branches -> ./classified/EMB_CT_508.namd_r.csv
+
+
+##################################################
+520.omnetpp_r
+##################################################
+  520.omnetpp_r        Static - Loss:  37.548%   Dynamic Weighted loss:  28.400%
+  Misclassified: 3353 branches -> ./misclassified/EMB_CT_520.omnetpp_r.csv
+  Classified:    5577 branches -> ./classified/EMB_CT_520.omnetpp_r.csv
+
+
+##################################################
+510.parest_r
+##################################################
+  510.parest_r         Static - Loss:  32.493%   Dynamic Weighted loss:  26.420%
+  Misclassified: 5052 branches -> ./misclassified/EMB_CT_510.parest_r.csv
+  Classified:    10496 branches -> ./classified/EMB_CT_510.parest_r.csv
+
+
+##################################################
+500.perlbench_r
+##################################################
+  500.perlbench_r      Static - Loss:  37.476%   Dynamic Weighted loss:  32.460%
+  Misclassified: 6420 branches -> ./misclassified/EMB_CT_500.perlbench_r.csv
+  Classified:    10711 branches -> ./classified/EMB_CT_500.perlbench_r.csv
+
+
+##################################################
+511.povray_r
+##################################################
+  511.povray_r         Static - Loss:  33.818%   Dynamic Weighted loss:  38.156%
+  Misclassified: 2465 branches -> ./misclassified/EMB_CT_511.povray_r.csv
+  Classified:    4824 branches -> ./classified/EMB_CT_511.povray_r.csv
+
+
+##################################################
+521.wrf_r
+##################################################
+  521.wrf_r            Static - Loss:  37.548%   Dynamic Weighted loss:  18.696%
+  Misclassified: 15108 branches -> ./misclassified/EMB_CT_521.wrf_r.csv
+  Classified:    25128 branches -> ./classified/EMB_CT_521.wrf_r.csv
+
+
+##################################################
+525.x264_r
+##################################################
+  525.x264_r           Static - Loss:  37.307%   Dynamic Weighted loss:  22.209%
+  Misclassified: 1671 branches -> ./misclassified/EMB_CT_525.x264_r.csv
+  Classified:    2808 branches -> ./classified/EMB_CT_525.x264_r.csv
+
+
+##################################################
+523.xalancbmk_r
+##################################################
+  523.xalancbmk_r      Static - Loss:  33.596%   Dynamic Weighted loss:  15.871%
+  Misclassified: 4566 branches -> ./misclassified/EMB_CT_523.xalancbmk_r.csv
+  Classified:    9025 branches -> ./classified/EMB_CT_523.xalancbmk_r.csv

@@ -1,0 +1,88 @@
+
+
+##################################################
+526.blender_r
+##################################################
+  526.blender_r        Static - Loss:  36.128%   Dynamic Weighted loss:  34.730%
+  Misclassified: 5370 branches -> ./misclassified/EMB_CT_526.blender_r.csv
+  Classified:    9494 branches -> ./classified/EMB_CT_526.blender_r.csv
+
+
+##################################################
+503.bwaves_r
+##################################################
+  503.bwaves_r         Static - Loss:  32.892%   Dynamic Weighted loss:  24.741%
+  Misclassified: 746 branches -> ./misclassified/EMB_CT_503.bwaves_r.csv
+  Classified:    1522 branches -> ./classified/EMB_CT_503.bwaves_r.csv
+
+
+##################################################
+527.cam4_r
+##################################################
+  527.cam4_r           Static - Loss:  30.321%   Dynamic Weighted loss:  27.957%
+  Misclassified: 6993 branches -> ./misclassified/EMB_CT_527.cam4_r.csv
+  Classified:    16070 branches -> ./classified/EMB_CT_527.cam4_r.csv
+
+
+##################################################
+531.deepsjeng_r
+##################################################
+  531.deepsjeng_r      Static - Loss:  36.135%   Dynamic Weighted loss:  36.725%
+  Misclassified: 950 branches -> ./misclassified/EMB_CT_531.deepsjeng_r.csv
+  Classified:    1679 branches -> ./classified/EMB_CT_531.deepsjeng_r.csv
+
+
+##################################################
+548.exchange2_r
+##################################################
+  548.exchange2_r      Static - Loss:  34.180%   Dynamic Weighted loss:  32.151%
+  Misclassified: 1117 branches -> ./misclassified/EMB_CT_548.exchange2_r.csv
+  Classified:    2151 branches -> ./classified/EMB_CT_548.exchange2_r.csv
+
+
+##################################################
+549.fotonik3d_r
+##################################################
+  549.fotonik3d_r      Static - Loss:  28.493%   Dynamic Weighted loss:  15.395%
+  Misclassified: 1354 branches -> ./misclassified/EMB_CT_549.fotonik3d_r.csv
+  Classified:    3398 branches -> ./classified/EMB_CT_549.fotonik3d_r.csv
+
+
+##################################################
+538.imagick_r
+##################################################
+  538.imagick_r        Static - Loss:  33.374%   Dynamic Weighted loss:   6.596%
+  Misclassified: 1353 branches -> ./misclassified/EMB_CT_538.imagick_r.csv
+  Classified:    2701 branches -> ./classified/EMB_CT_538.imagick_r.csv
+
+
+##################################################
+541.leela_r
+##################################################
+  541.leela_r          Static - Loss:  38.172%   Dynamic Weighted loss:  32.877%
+  Misclassified: 1554 branches -> ./misclassified/EMB_CT_541.leela_r.csv
+  Classified:    2517 branches -> ./classified/EMB_CT_541.leela_r.csv
+
+
+##################################################
+544.nab_r
+##################################################
+  544.nab_r            Static - Loss:  35.135%   Dynamic Weighted loss:  15.455%
+  Misclassified: 1040 branches -> ./misclassified/EMB_CT_544.nab_r.csv
+  Classified:    1920 branches -> ./classified/EMB_CT_544.nab_r.csv
+
+
+##################################################
+554.roms_r
+##################################################
+  554.roms_r           Static - Loss:  26.851%   Dynamic Weighted loss:  11.568%
+  Misclassified: 1835 branches -> ./misclassified/EMB_CT_554.roms_r.csv
+  Classified:    4999 branches -> ./classified/EMB_CT_554.roms_r.csv
+
+
+##################################################
+557.xz_r
+##################################################
+  557.xz_r             Static - Loss:  35.751%   Dynamic Weighted loss:  29.375%
+  Misclassified: 759 branches -> ./misclassified/EMB_CT_557.xz_r.csv
+  Classified:    1364 branches -> ./classified/EMB_CT_557.xz_r.csv

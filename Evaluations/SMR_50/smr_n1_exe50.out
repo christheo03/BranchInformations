@@ -1,0 +1,264 @@
+
+
+##################################################
+507.cactuBSSN_r
+##################################################
+  507.cactuBSSN_r      Static - Loss:  30.131%   Dynamic Weighted loss:  14.440%
+  Misclassified: 3491 branches -> ./misclassified/EMB_CT_507.cactuBSSN_r.csv
+
+
+##################################################
+502.gcc_r
+##################################################
+  502.gcc_r            Static - Loss:  34.276%   Dynamic Weighted loss:  31.866%
+  Misclassified: 29655 branches -> ./misclassified/EMB_CT_502.gcc_r.csv
+
+
+##################################################
+519.lbm_r
+##################################################
+  519.lbm_r            Static - Loss:  21.120%   Dynamic Weighted loss:   3.448%
+  Misclassified: 215 branches -> ./misclassified/EMB_CT_519.lbm_r.csv
+
+
+##################################################
+505.mcf_r
+##################################################
+  505.mcf_r            Static - Loss:  25.890%   Dynamic Weighted loss:  32.399%
+  Misclassified: 80 branches -> ./misclassified/EMB_CT_505.mcf_r.csv
+
+
+##################################################
+508.namd_r
+##################################################
+  508.namd_r           Static - Loss:  25.543%   Dynamic Weighted loss:  19.952%
+  Misclassified: 894 branches -> ./misclassified/EMB_CT_508.namd_r.csv
+
+
+##################################################
+520.omnetpp_r
+##################################################
+  520.omnetpp_r        Static - Loss:  28.466%   Dynamic Weighted loss:  30.595%
+  Misclassified: 2542 branches -> ./misclassified/EMB_CT_520.omnetpp_r.csv
+
+
+##################################################
+510.parest_r
+##################################################
+  510.parest_r         Static - Loss:  27.515%   Dynamic Weighted loss:  29.311%
+  Misclassified: 4278 branches -> ./misclassified/EMB_CT_510.parest_r.csv
+
+
+##################################################
+500.perlbench_r
+##################################################
+  500.perlbench_r      Static - Loss:  33.220%   Dynamic Weighted loss:  29.537%
+  Misclassified: 5691 branches -> ./misclassified/EMB_CT_500.perlbench_r.csv
+
+
+##################################################
+511.povray_r
+##################################################
+  511.povray_r         Static - Loss:  24.462%   Dynamic Weighted loss:  37.237%
+  Misclassified: 1783 branches -> ./misclassified/EMB_CT_511.povray_r.csv
+
+
+##################################################
+521.wrf_r
+##################################################
+  521.wrf_r            Static - Loss:  24.257%   Dynamic Weighted loss:  23.453%
+  Misclassified: 9760 branches -> ./misclassified/EMB_CT_521.wrf_r.csv
+
+
+##################################################
+525.x264_r
+##################################################
+  525.x264_r           Static - Loss:  30.342%   Dynamic Weighted loss:  21.550%
+  Misclassified: 1359 branches -> ./misclassified/EMB_CT_525.x264_r.csv
+
+
+##################################################
+523.xalancbmk_r
+##################################################
+  523.xalancbmk_r      Static - Loss:  32.117%   Dynamic Weighted loss:  20.882%
+  Misclassified: 4365 branches -> ./misclassified/EMB_CT_523.xalancbmk_r.csv
+Using cuda
+
+
+##################################################
+507.cactuBSSN_r
+##################################################
+  507.cactuBSSN_r      1-Accuracy:  33.696%   Binary Error:  22.373%
+  Misclassified: 3904 branches -> ./misclassified/ESP_507.cactuBSSN_r.csv
+Using cuda
+
+
+##################################################
+502.gcc_r
+##################################################
+  502.gcc_r            1-Accuracy:  35.848%   Binary Error:  32.736%
+  Misclassified: 31015 branches -> ./misclassified/ESP_502.gcc_r.csv
+Using cuda
+
+
+##################################################
+519.lbm_r
+##################################################
+  519.lbm_r            1-Accuracy:  29.764%   Binary Error:  33.745%
+  Misclassified: 303 branches -> ./misclassified/ESP_519.lbm_r.csv
+Using cuda
+
+
+##################################################
+505.mcf_r
+##################################################
+  505.mcf_r            1-Accuracy:  24.595%   Binary Error:  32.622%
+  Misclassified: 76 branches -> ./misclassified/ESP_505.mcf_r.csv
+Using cuda
+
+
+##################################################
+508.namd_r
+##################################################
+  508.namd_r           1-Accuracy:  31.771%   Binary Error:  19.286%
+  Misclassified: 1112 branches -> ./misclassified/ESP_508.namd_r.csv
+Using cuda
+
+
+##################################################
+520.omnetpp_r
+##################################################
+  520.omnetpp_r        1-Accuracy:  37.368%   Binary Error:  39.086%
+  Misclassified: 3337 branches -> ./misclassified/ESP_520.omnetpp_r.csv
+Using cuda
+
+
+##################################################
+510.parest_r
+##################################################
+  510.parest_r         1-Accuracy:  32.628%   Binary Error:  26.921%
+  Misclassified: 5073 branches -> ./misclassified/ESP_510.parest_r.csv
+Using cuda
+
+
+##################################################
+500.perlbench_r
+##################################################
+  500.perlbench_r      1-Accuracy:  34.732%   Binary Error:  33.339%
+  Misclassified: 5950 branches -> ./misclassified/ESP_500.perlbench_r.csv
+Using cuda
+
+
+##################################################
+511.povray_r
+##################################################
+  511.povray_r         1-Accuracy:  28.618%   Binary Error:  45.074%
+  Misclassified: 2086 branches -> ./misclassified/ESP_511.povray_r.csv
+Using cuda
+
+
+##################################################
+521.wrf_r
+##################################################
+  521.wrf_r            1-Accuracy:  27.110%   Binary Error:  28.074%
+  Misclassified: 10908 branches -> ./misclassified/ESP_521.wrf_r.csv
+Using cuda
+
+
+##################################################
+525.x264_r
+##################################################
+  525.x264_r           1-Accuracy:  35.432%   Binary Error:  22.702%
+  Misclassified: 1587 branches -> ./misclassified/ESP_525.x264_r.csv
+Using cuda
+
+
+##################################################
+523.xalancbmk_r
+##################################################
+  523.xalancbmk_r      1-Accuracy:  31.859%   Binary Error:  18.774%
+  Misclassified: 4330 branches -> ./misclassified/ESP_523.xalancbmk_r.csv
+
+
+##################################################
+507.cactuBSSN_r
+##################################################
+  507.cactuBSSN_r      1-Accuracy:  32.660%   Binary Error:  18.313%
+  Misclassified: 3784 branches -> ./misclassified/SS_CT_507.cactuBSSN_r.csv
+
+
+##################################################
+502.gcc_r
+##################################################
+  502.gcc_r            1-Accuracy:  36.207%   Binary Error:  34.279%
+  Misclassified: 31326 branches -> ./misclassified/SS_CT_502.gcc_r.csv
+
+
+##################################################
+519.lbm_r
+##################################################
+  519.lbm_r            1-Accuracy:  24.165%   Binary Error:  34.169%
+  Misclassified: 246 branches -> ./misclassified/SS_CT_519.lbm_r.csv
+
+
+##################################################
+505.mcf_r
+##################################################
+  505.mcf_r            1-Accuracy:  23.301%   Binary Error:  25.610%
+  Misclassified: 72 branches -> ./misclassified/SS_CT_505.mcf_r.csv
+
+
+##################################################
+508.namd_r
+##################################################
+  508.namd_r           1-Accuracy:  28.114%   Binary Error:  26.433%
+  Misclassified: 984 branches -> ./misclassified/SS_CT_508.namd_r.csv
+
+
+##################################################
+520.omnetpp_r
+##################################################
+  520.omnetpp_r        1-Accuracy:  32.408%   Binary Error:  31.658%
+  Misclassified: 2894 branches -> ./misclassified/SS_CT_520.omnetpp_r.csv
+
+
+##################################################
+510.parest_r
+##################################################
+  510.parest_r         1-Accuracy:  35.419%   Binary Error:  27.962%
+  Misclassified: 5507 branches -> ./misclassified/SS_CT_510.parest_r.csv
+
+
+##################################################
+500.perlbench_r
+##################################################
+  500.perlbench_r      1-Accuracy:  33.781%   Binary Error:  31.872%
+  Misclassified: 5787 branches -> ./misclassified/SS_CT_500.perlbench_r.csv
+
+
+##################################################
+511.povray_r
+##################################################
+  511.povray_r         1-Accuracy:  27.343%   Binary Error:  41.411%
+  Misclassified: 1993 branches -> ./misclassified/SS_CT_511.povray_r.csv
+
+
+##################################################
+521.wrf_r
+##################################################
+  521.wrf_r            1-Accuracy:  27.132%   Binary Error:  28.298%
+  Misclassified: 10917 branches -> ./misclassified/SS_CT_521.wrf_r.csv
+
+
+##################################################
+525.x264_r
+##################################################
+  525.x264_r           1-Accuracy:  32.708%   Binary Error:  22.300%
+  Misclassified: 1465 branches -> ./misclassified/SS_CT_525.x264_r.csv
+
+
+##################################################
+523.xalancbmk_r
+##################################################
+  523.xalancbmk_r      1-Accuracy:  33.103%   Binary Error:  18.549%
+  Misclassified: 4499 branches -> ./misclassified/SS_CT_523.xalancbmk_r.csv

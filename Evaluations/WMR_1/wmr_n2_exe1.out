@@ -1,0 +1,77 @@
+
+
+##################################################
+526.blender_r
+##################################################
+  526.blender_r        Static - Loss:  35.462%   Dynamic Weighted loss:  30.782%
+  Predictions: 14864 branches -> ./predictions/EMB_CT_526.blender_r.csv
+
+
+##################################################
+503.bwaves_r
+##################################################
+  503.bwaves_r         Static - Loss:  28.042%   Dynamic Weighted loss:  22.512%
+  Predictions: 2268 branches -> ./predictions/EMB_CT_503.bwaves_r.csv
+
+
+##################################################
+527.cam4_r
+##################################################
+  527.cam4_r           Static - Loss:  29.302%   Dynamic Weighted loss:  22.786%
+  Predictions: 23063 branches -> ./predictions/EMB_CT_527.cam4_r.csv
+
+
+##################################################
+531.deepsjeng_r
+##################################################
+  531.deepsjeng_r      Static - Loss:  34.956%   Dynamic Weighted loss:  37.515%
+  Predictions: 2629 branches -> ./predictions/EMB_CT_531.deepsjeng_r.csv
+
+
+##################################################
+548.exchange2_r
+##################################################
+  548.exchange2_r      Static - Loss:  28.825%   Dynamic Weighted loss:  33.543%
+  Predictions: 3268 branches -> ./predictions/EMB_CT_548.exchange2_r.csv
+
+
+##################################################
+549.fotonik3d_r
+##################################################
+  549.fotonik3d_r      Static - Loss:  31.376%   Dynamic Weighted loss:  14.747%
+  Predictions: 4752 branches -> ./predictions/EMB_CT_549.fotonik3d_r.csv
+
+
+##################################################
+538.imagick_r
+##################################################
+  538.imagick_r        Static - Loss:  32.536%   Dynamic Weighted loss:  13.027%
+  Predictions: 4054 branches -> ./predictions/EMB_CT_538.imagick_r.csv
+
+
+##################################################
+541.leela_r
+##################################################
+  541.leela_r          Static - Loss:  38.369%   Dynamic Weighted loss:  32.600%
+  Predictions: 4071 branches -> ./predictions/EMB_CT_541.leela_r.csv
+
+
+##################################################
+544.nab_r
+##################################################
+  544.nab_r            Static - Loss:  36.351%   Dynamic Weighted loss:  22.151%
+  Predictions: 2960 branches -> ./predictions/EMB_CT_544.nab_r.csv
+
+
+##################################################
+554.roms_r
+##################################################
+  554.roms_r           Static - Loss:  29.500%   Dynamic Weighted loss:  11.465%
+  Predictions: 6834 branches -> ./predictions/EMB_CT_554.roms_r.csv
+
+
+##################################################
+557.xz_r
+##################################################
+  557.xz_r             Static - Loss:  34.856%   Dynamic Weighted loss:  30.467%
+  Predictions: 2123 branches -> ./predictions/EMB_CT_557.xz_r.csv

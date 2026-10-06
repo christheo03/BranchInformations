@@ -8,7 +8,7 @@ import optuna
 import argparse
 import os
 
-DATA_DIR = "../../results"
+DATA_DIR = "../results"
 MODEL_NAME = "ESP"
 N_CLASSES = 1
 EPOCHS = 200
