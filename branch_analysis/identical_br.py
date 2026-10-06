@@ -18,7 +18,7 @@ from data_engin import add_register_features, add_label_tnt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "../results")
-OUT_FILE = os.path.join(HERE, "duplicate_feature_summary.json")
+OUT_FILE = os.path.join(HERE, "identical_br.json")
 FEATURE_COLS = CONT_COLS + BIN_COLS + [ROUT_COL] + REG_COLS + OPC_COLS
 
 
