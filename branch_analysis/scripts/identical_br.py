@@ -8,7 +8,7 @@ Features are rebuilt the same way build_features does it, but kept raw
 unchanged). Branches in the same group are indistinguishable to EMB_CT.
 
 Run from branch_analysis/:
-    PYTHONPATH=../mlp_predictor python identical_br.py
+    PYTHONPATH=../mlp_predictor python scripts/identical_br.py
 """
 import json
 import os
@@ -18,9 +18,10 @@ from ml_configs import CONT_COLS, BIN_COLS, ROUT_COL, REG_COLS, OPC_COLS, ROUTIN
 from data_engin import add_register_features
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(HERE, "predictions")
-OUT_FILE = os.path.join(HERE, "identical_br.json")
-SUMMARY_FILE = os.path.join(HERE, "identical_br.csv")
+ROOT = os.path.dirname(HERE)  # branch_analysis/
+DATA_DIR = os.path.join(ROOT, "predictions")
+OUT_FILE = os.path.join(ROOT, "data", "identical_br.json")
+SUMMARY_FILE = os.path.join(ROOT, "data", "identical_br.csv")
 FEATURE_COLS = CONT_COLS + BIN_COLS + [ROUT_COL] + REG_COLS + OPC_COLS
 
 

@@ -4,8 +4,9 @@ import os
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PREDICTIONS_DIR = os.path.join(HERE, "predictions")
-OUT_FILE = os.path.join(HERE, "benchmark_wmr.csv")
+ROOT = os.path.dirname(HERE)  # branch_analysis/
+PREDICTIONS_DIR = os.path.join(ROOT, "predictions")
+OUT_FILE = os.path.join(ROOT, "data", "benchmark_wmr.csv")
 
 rows = []
 for path in sorted(glob.glob(os.path.join(PREDICTIONS_DIR, "EMB_CT_*.csv"))):
