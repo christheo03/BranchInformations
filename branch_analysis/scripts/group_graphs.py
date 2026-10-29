@@ -7,10 +7,12 @@ Graphs about the identical-feature groups, as png files in figures/.
                                  (pure) against groups that go both ways (mixed).
     4. total_vs_groups.png    - each benchmark's total error, split into the
                                  part inside groups and the part outside them.
-    5. wmr_size_<range>.png   - graphs, one per group size range: each benchmark's
+    5. total_vs_other_benchmarks.png - each benchmark's total error, and the part caused
+                                 by branches that have a twin in a different benchmark.
+    6. wmr_size_<range>.png   - graphs, one per group size range: each benchmark's
                                  total WMR and the part caused by groups of that size.
 
-Reads data/identical_br.csv and data/benchmark_wmr.csv.
+Reads data/identical_br.csv, data/br_to_groupid.csv and data/benchmark_wmr.csv.
 
 Run from branch_analysis/:
     python scripts/group_graphs.py
@@ -141,6 +143,36 @@ def graph_total_vs_groups(groups):
     save(fig, "total_vs_groups.png")
 
 
+def graph_total_vs_other_benchmarks(groups):
+    # A group that has branches in 2+ benchmarks: every branch in it has a twin
+    # in a different benchmark (even if it also has twins in its own benchmark).
+    membership = pd.read_csv(os.path.join(DATA_DIR, "br_to_groupid.csv"))
+    spans = membership.groupby("group")["benchmark"].nunique()
+    other = groups["group"].map(spans) > 1
+
+    totals = pd.read_csv(os.path.join(DATA_DIR, "benchmark_wmr.csv")).set_index("benchmark")["wmr"]
+    cross = pd.Series({bench: groups.loc[other, f"wmr_{bench}"].sum() for bench in totals.index})
+    same_only = pd.Series({bench: groups.loc[~other, f"wmr_{bench}"].sum() for bench in totals.index})
+    no_twin = totals - cross - same_only
+    order = totals.sort_values().index
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    y = np.arange(len(order))
+    ax.barh(y, no_twin[order], color=BLUE, label="Branches with no twin")
+    ax.barh(y, same_only[order], left=no_twin[order], color=GRAY, label="Twins only in the same benchmark")
+    ax.barh(y, cross[order], left=(no_twin + same_only)[order], color=ORANGE, label="Has a twin in a different benchmark")
+    for i, bench in enumerate(order):
+        ax.text(totals[bench] + 0.4, i, f"{cross[bench]:.2f} ({100 * cross[bench] / totals[bench]:.0f}%)", va="center", fontsize=9)
+    ax.set_yticks(y)
+    ax.set_yticklabels([b.split(".", 1)[1].replace("_r", "") for b in order])
+    ax.set_xlabel("Weighted miss rate of the benchmark")
+    ax.set_xlim(0, totals.max() * 1.25)
+    ax.set_title(f"Error from branches with a twin in a different benchmark: {cross.sum():.0f} of {totals.sum():.0f} ({100 * cross.sum() / totals.sum():.0f}%)")
+    ax.legend(frameon=False, loc="lower right")
+    ax.spines[["top", "right"]].set_visible(False)
+    save(fig, "total_vs_other_benchmarks.png")
+
+
 SIZE_RANGES = [
     ("2", 2, 2),
     ("3-4", 3, 4),
@@ -186,6 +218,7 @@ def main():
     graph_group_error(groups, total_error)
     graph_pure_vs_mixed(groups)
     graph_total_vs_groups(groups)
+    graph_total_vs_other_benchmarks(groups)
     totals = pd.read_csv(os.path.join(DATA_DIR, "benchmark_wmr.csv")).set_index("benchmark")["wmr"]
     for label, low, high in SIZE_RANGES:
         graph_size_range(groups, totals, label, low, high)
