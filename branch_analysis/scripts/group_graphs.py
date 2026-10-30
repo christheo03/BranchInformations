@@ -162,7 +162,7 @@ def graph_total_vs_other_benchmarks(groups):
     ax.barh(y, same_only[order], left=no_twin[order], color=GRAY, label="Twins only in the same benchmark")
     ax.barh(y, cross[order], left=(no_twin + same_only)[order], color=ORANGE, label="Has a twin in a different benchmark")
     for i, bench in enumerate(order):
-        ax.text(totals[bench] + 0.4, i, f"{cross[bench]:.2f} ({100 * cross[bench] / totals[bench]:.0f}%)", va="center", fontsize=9)
+        ax.text(totals[bench] + 0.4, i, f"{same_only[bench]:.2f} ({100 * same_only[bench] / totals[bench]:.0f}%)", va="center", fontsize=9)
     ax.set_yticks(y)
     ax.set_yticklabels([b.split(".", 1)[1].replace("_r", "") for b in order])
     ax.set_xlabel("Weighted miss rate of the benchmark")
