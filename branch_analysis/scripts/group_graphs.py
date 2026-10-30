@@ -167,7 +167,7 @@ def graph_total_vs_other_benchmarks(groups):
     ax.set_yticklabels([b.split(".", 1)[1].replace("_r", "") for b in order])
     ax.set_xlabel("Weighted miss rate of the benchmark")
     ax.set_xlim(0, totals.max() * 1.25)
-    ax.set_title(f"Error from branches with a twin in a different benchmark: {cross.sum():.0f} of {totals.sum():.0f} ({100 * cross.sum() / totals.sum():.0f}%)")
+    ax.set_title(f"WMR from branches with twins only in the same benchmark: {same_only.sum():.1f} of {totals.sum():.0f} total WMR ({100 * same_only.sum() / totals.sum():.0f}%)")
     ax.legend(frameon=False, loc="lower right")
     ax.spines[["top", "right"]].set_visible(False)
     save(fig, "total_vs_other_benchmarks.png")
