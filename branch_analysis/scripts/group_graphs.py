@@ -11,6 +11,7 @@ Graphs about the identical-feature groups, as png files in figures/.
                                  by branches that have a twin in a different benchmark.
     6. wmr_size_<range>.png   - graphs, one per group size range: each benchmark's
                                  total WMR and the part caused by groups of that size.
+    7. wmr_by_group_size.png  - each benchmark's total WMR in one bar, split by group size.
 
 Reads data/identical_br.csv, data/br_to_groupid.csv and data/benchmark_wmr.csv.
 
@@ -208,6 +209,37 @@ def graph_size_range(groups, totals, label, low, high):
     save(fig, name)
 
 
+def graph_wmr_by_group_size(groups, totals):
+    # One bar per benchmark, split by the size of the group each branch is in.
+    # Same numbers as the wmr_size_<range>.png graphs, in a single chart.
+    ranges = [r for r in SIZE_RANGES if r[0] != "3-9"]  # 3-9 overlaps 3-4 and 5-9
+    shades = ["#f9c5ad", "#f4a07a", ORANGE, "#c04a1d", "#7d2e0e"]
+    parts = {}
+    for label, low, high in ranges:
+        in_range = groups[(groups["size"] >= low) & (groups["size"] <= high)]
+        parts[label] = pd.Series({bench: in_range[f"wmr_{bench}"].sum() for bench in totals.index})
+    outside = totals - sum(parts.values())
+    order = totals.sort_values().index
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    y = np.arange(len(order))
+    ax.barh(y, outside[order], color=BLUE, label="Branches with no twin")
+    left = outside[order]
+    for (label, _, _), shade in zip(ranges, shades):
+        ax.barh(y, parts[label][order], left=left, color=shade, label=f"Group of {label} branches")
+        left = left + parts[label][order]
+    for i, bench in enumerate(order):
+        ax.text(totals[bench] + 0.4, i, f"{100 * (totals[bench] - outside[bench]) / totals[bench]:.0f}% in groups", va="center", fontsize=9)
+    ax.set_yticks(y)
+    ax.set_yticklabels([b.split(".", 1)[1].replace("_r", "") for b in order])
+    ax.set_xlabel("Weighted miss rate of the benchmark")
+    ax.set_xlim(0, totals.max() * 1.25)
+    ax.set_title("Where each benchmark's error comes from, by size of the branch's group")
+    ax.legend(frameon=False, loc="lower right")
+    ax.spines[["top", "right"]].set_visible(False)
+    save(fig, "wmr_by_group_size.png")
+
+
 def main():
     os.makedirs(FIGURES_DIR, exist_ok=True)
     groups = load_groups()
@@ -222,6 +254,7 @@ def main():
     totals = pd.read_csv(os.path.join(DATA_DIR, "benchmark_wmr.csv")).set_index("benchmark")["wmr"]
     for label, low, high in SIZE_RANGES:
         graph_size_range(groups, totals, label, low, high)
+    graph_wmr_by_group_size(groups, totals)
 
 
 if __name__ == "__main__":
