@@ -4,13 +4,19 @@ Look up one branch by benchmark and PC.
 Run from branch_analysis/:
     python lookup.py 502.gcc_r 0x6718be
     python lookup.py gcc 0x6718be        (the short name is enough)
+
+Without a PC it writes csv files for the whole benchmark to reports/<benchmark>/:
+    python lookup.py exchange
+    cross_benchmark_twins.csv - branches whose group also has branches in other benchmarks
+    same_benchmark_twins.csv  - branches whose group is only in this benchmark
+    no_twin.csv               - branches that are in no group
 """
 import argparse
 import os
 
 import pandas as pd
 
-from helper import branch_wmr_if_wrong
+from helper import branch_wmr, branch_wmr_if_wrong
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PREDICTIONS_DIR = os.path.join(ROOT, "predictions")
@@ -102,10 +108,41 @@ def print_benchmark(benchmark):
     line("Branches", f"{int(benchmark['branches']):,}")
 
 
+def write_reports(bench):
+    path = os.path.join(PREDICTIONS_DIR, f"EMB_CT_{bench}.csv")
+    columns = ["Address", "Opcode", "Routine_Type", "Executed", "Taken", "rate", "weight", "predicted", "actual"]
+    df = pd.read_csv(path, usecols=columns)
+    df["wmr"] = 100 * branch_wmr(df["predicted"], df["rate"], df["weight"])
+    df["wmr_if_wrong"] = 100 * branch_wmr_if_wrong(df["actual"], df["rate"], df["weight"])
+
+    # Which group each branch of this benchmark is in, and how far the group reaches.
+    membership = pd.read_csv(os.path.join(DATA_DIR, "br_to_groupid.csv"))
+    group_size = membership.groupby("group").size()
+    group_benchmarks = membership.groupby("group")["benchmark"].nunique()
+    here = membership[membership["benchmark"] == bench]
+    df["group"] = df["Address"].str.lower().map(dict(zip(here["pc"].str.lower(), here["group"]))).astype("Int64")
+    df["group_size"] = df["group"].map(group_size).astype("Int64")
+    df["benchmarks_in_group"] = df["group"].map(group_benchmarks).astype("Int64")
+
+    # Same split as total_vs_other_benchmarks.png
+    reports = {
+        "cross_benchmark_twins": df[df["benchmarks_in_group"] > 1],
+        "same_benchmark_twins": df[df["benchmarks_in_group"] == 1],
+        "no_twin": df[df["group"].isna()],
+    }
+
+    out_dir = os.path.join(ROOT, "reports", bench)
+    os.makedirs(out_dir, exist_ok=True)
+    for name, rows in reports.items():
+        rows.sort_values("wmr", ascending=False).to_csv(os.path.join(out_dir, f"{name}.csv"), index=False)
+        print(f"{name + '.csv':<28}{len(rows):>8,} branches   WMR {rows['wmr'].sum():.2f}")
+    print(f"written to {out_dir}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("benchmark")
-    parser.add_argument("pc")
+    parser.add_argument("pc", nargs="?")  # without a PC: write the benchmark's reports
     args = parser.parse_args()
     pc = args.pc
 
@@ -117,6 +154,10 @@ def main():
         print(f"'{args.benchmark}' matches more than one benchmark: {', '.join(matches)}")
         return
     bench = matches[0]
+
+    if pc is None:
+        write_reports(bench)
+        return
 
     path = os.path.join(PREDICTIONS_DIR, f"EMB_CT_{bench}.csv")
 
