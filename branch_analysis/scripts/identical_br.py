@@ -1,7 +1,10 @@
 """
 Find branches (across all benchmarks) that have exactly the same EMB_CT
 input features, and write them to identical_br.json, plus a one-line-per-group
-summary to identical_br.csv.
+summary to identical_br.csv. It also adds a Group column to every
+predictions/EMB_CT_*.csv: the group number of each branch (0 if the
+branch is in no group), and the branch's wmr, its share (%) of its
+benchmark's weighted miss rate.
 
 Features are rebuilt the same way build_features does it, but kept raw
 (before StandardScaler / vocab encoding - both are 1-to-1, so equality is
@@ -32,10 +35,6 @@ def load_features(name):
     # WMR of each single branch (its weighted error)
     df["wmr"] = (1 - df["predicted"]) * df["rate"] * df["weight"] + df["predicted"] * (1 - df["rate"]) * df["weight"]
 
-    # WMR of each branch if it had been predicted wrong (the opposite of its label y)
-    wrong = 1 - df["y"]
-    df["wmr_if_wrong"] = (1 - wrong) * df["rate"] * df["weight"] + wrong * (1 - df["rate"]) * df["weight"]
-
     add_register_features(df, df)
     df[ROUT_COL] = df[ROUT_COL].map(ROUTINE_TYPE_MAP).fillna(0).astype(int)
 
@@ -52,6 +51,20 @@ def to_python(v):
     return v.item() if hasattr(v, "item") else v
 
 
+def write_branch_columns(df):
+    # Read the csv as text so the other columns are written back exactly as they were.
+    for name in ALL_FILES:
+        path = os.path.join(DATA_DIR, "EMB_CT_" + name + ".csv")
+        out = pd.read_csv(path, dtype=str, keep_default_na=False)
+        out = out.drop(columns=["Group", "wmr"], errors="ignore")
+        rows = df[df["file"] == name]
+        out["Group"] = rows["Group"].astype(str).values
+        # Weights add up to 1 inside one benchmark, so 100 * wmr is the
+        # branch's share (%) of that benchmark's weighted miss rate.
+        out["wmr"] = (100 * rows["wmr"]).astype(str).values
+        out.to_csv(path, index=False)
+
+
 def main():
     df = pd.concat([load_features(f) for f in ALL_FILES], ignore_index=True)
 
@@ -62,9 +75,12 @@ def main():
     groups = list(dups.groupby(FEATURE_COLS, sort=False))
     groups.sort(key=group_size, reverse=True)
 
+    df["Group"] = 0
+
     out = []
     summary = []
     for gid, (_, g) in enumerate(groups, start=1):
+        df.loc[g.index, "Group"] = gid
         # Weights add up to 1 inside one benchmark, so 100 * wmr is the
         # group's share (%) of that benchmark's weighted miss rate.
         # 0 when the group has no branches from that benchmark.
@@ -80,7 +96,6 @@ def main():
             "predicted_correct": int((g["predicted"] == g["y"]).sum()),
             "predicted_wrong": int((g["predicted"] != g["y"]).sum()),
             "wmr_sum": sum(bench_wmr.values()),
-            "wmr_sum_if_wrong": 100 * g["wmr_if_wrong"].sum(),
             **bench_wmr,
         })
         out.append({
@@ -104,6 +119,8 @@ def main():
         json.dump(out, f, indent=2)
 
     pd.DataFrame(summary).sort_values("wmr_sum", ascending=False).to_csv(SUMMARY_FILE, index=False)
+
+    write_branch_columns(df)
 
     print(f"{len(dups)} of {len(df)} branches share features with another branch")
     print(f"{len(out)} groups written to {OUT_FILE}")
